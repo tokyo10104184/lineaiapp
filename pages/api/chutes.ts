@@ -6,7 +6,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return;
   }
 
-  const { messages, model } = req.body;
+  const { messages, model, temperature = 0.7 } = req.body;
   if (!messages || !model) {
     res.status(400).json({ error: 'Messages and model are required' });
     return;
@@ -26,6 +26,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       body: JSON.stringify({
         model,
         messages,
+        temperature,
       }),
     });
 
