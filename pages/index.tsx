@@ -11,7 +11,7 @@ export default function Home() {
   const modelOptions = {
     'Deepseek V3 0324': 'deepseek-ai/DeepSeek-V3-0324',
     'Deepseek R1 0528': 'deepseek-ai/DeepSeek-R1-0528',
-    'Qwen3 235B': 'Qwen/Qwen3-235B-A22B',
+    'Qwen3 235B A22B': 'Qwen/Qwen3-235B-A22B',
     'Qwen3 32B': 'Qwen/Qwen3-32B',
     'Llama 4 Scout': 'chutesai/Llama-4-Scout-17B-16E-Instruct',
     'Mistral Small 3.1': 'chutesai/Mistral-Small-3.1-24B-Instruct-2503'

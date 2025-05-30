@@ -17,7 +17,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     
     console.log('Making API request to chutes.com with model:', model);
     
-    const apiRes = await fetch('https://llm.chutes.com/v1/chat/completions', {
+    const apiRes = await fetch('https://llm.chutes.ai/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
