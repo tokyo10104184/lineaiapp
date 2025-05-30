@@ -165,6 +165,15 @@ export default function Home() {
     localStorage.setItem('chatAppData', JSON.stringify(data))
   }, [conversations, characters, currentConversationId, currentCharacterId, backgroundColor, isDarkMode])
 
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }
+
+  useEffect(scrollToBottom, [conversations])
+
+  const currentConversation = conversations.find(c => c.id === currentConversationId)
+  const currentCharacter = characters.find(c => c.id === currentCharacterId)
+
   // 既読状態の更新
   useEffect(() => {
     const markAsRead = () => {
@@ -193,15 +202,6 @@ export default function Home() {
     const timer = setTimeout(markAsRead, 1000)
     return () => clearTimeout(timer)
   }, [currentConversation, currentCharacter, currentConversationId])
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }
-
-  useEffect(scrollToBottom, [conversations])
-
-  const currentConversation = conversations.find(c => c.id === currentConversationId)
-  const currentCharacter = characters.find(c => c.id === currentCharacterId)
 
   const isCharacterActive = () => {
     if (!currentCharacter) return false
