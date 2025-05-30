@@ -17,6 +17,7 @@ interface Character {
   systemPrompt: string
   color: string
   activeHours: { start: number; end: number }
+  useActiveHours: boolean
 }
 
 interface Conversation {
@@ -46,7 +47,8 @@ export default function Home() {
     personality: '',
     systemPrompt: '',
     color: '#10b981',
-    activeHours: { start: 0, end: 23 }
+    activeHours: { start: 0, end: 23 },
+    useActiveHours: false
   })
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
@@ -135,7 +137,8 @@ export default function Home() {
 4. 返答の最後に現在の感情を以下の形式で含めてください：[感情:喜び] （怒り、悲しみ、喜び、驚き、恐れ、嫌悪、愛、平静のいずれか）
 5. 猫のような口調で話し、「にゃ」を適度に使ってください`,
         color: '#10b981',
-        activeHours: { start: 0, end: 23 }
+        activeHours: { start: 0, end: 23 },
+        useActiveHours: false
       }
       setCharacters([defaultChar])
       setCurrentCharacterId('1')
@@ -184,7 +187,7 @@ export default function Home() {
           (currentHour >= start && currentHour <= end) :
           (currentHour >= start || currentHour <= end)
 
-        if (isActive) {
+        if (isActive || !currentCharacter.useActiveHours) {
           setConversations(prev => prev.map(conv => 
             conv.id === currentConversationId 
               ? { 
@@ -205,6 +208,7 @@ export default function Home() {
 
   const isCharacterActive = () => {
     if (!currentCharacter) return false
+    if (!currentCharacter.useActiveHours) return true
     const currentHour = new Date().getHours()
     const { start, end } = currentCharacter.activeHours
     return start <= end ? 
@@ -262,7 +266,8 @@ export default function Home() {
       personality: '',
       systemPrompt: '',
       color: '#10b981',
-      activeHours: { start: 0, end: 23 }
+      activeHours: { start: 0, end: 23 },
+      useActiveHours: false
     })
     setShowCharacterDialog(false)
   }
@@ -299,7 +304,7 @@ export default function Home() {
 
   const sendMessage = async () => {
     if (!input.trim() || !currentConversation || !currentCharacter) return
-    if (!isCharacterActive()) {
+    if (currentCharacter.useActiveHours && !isCharacterActive()) {
       alert(`${currentCharacter.name}は現在オフライン時間です（${currentCharacter.activeHours.start}時-${currentCharacter.activeHours.end}時がアクティブ時間）`)
       return
     }
@@ -418,7 +423,7 @@ export default function Home() {
 
       <div className="flex flex-1 overflow-hidden">
         {/* サイドバー */}
-        <div className={`${sidebarOpen ? 'w-80' : 'w-0'} transition-all duration-300 ${bgColor} border-r ${borderColor} overflow-hidden flex flex-col`}>
+        <div className={`${sidebarOpen ? 'w-80 lg:w-80 md:w-72 sm:w-64' : 'w-0'} transition-all duration-300 ${bgColor} border-r ${borderColor} overflow-hidden flex flex-col`}>
           <div className={`p-4 border-b ${borderColor}`}>
             <div className="flex justify-between items-center mb-2">
               <h3 className={`font-bold text-lg ${textColor}`}>設定</h3>
@@ -510,7 +515,7 @@ export default function Home() {
                       style={{ backgroundColor: char.color }}
                     />
                     {char.name}
-                    {char.id === currentCharacterId && (
+                    {char.id === currentCharacterId && char.useActiveHours && (
                       <span className={`ml-2 text-xs ${isCharacterActive() ? 'text-green-500' : 'text-red-500'}`}>
                         {isCharacterActive() ? '●' : '○'}
                       </span>
@@ -527,7 +532,7 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="flex-1 p-4 space-y-4 overflow-y-auto">
+          <div className={`flex-1 p-4 space-y-4 overflow-y-auto ${bgColor}`}>
             <div>
               <label className={`block text-sm font-medium mb-2 ${textColor}`}>AIモデル</label>
               <select
@@ -586,14 +591,14 @@ export default function Home() {
               ☰
             </button>
             {currentCharacter ? currentCharacter.name : 'にゃんぷっぷー'}
-            {currentCharacter && (
+            {currentCharacter && currentCharacter.useActiveHours && (
               <span className={`ml-2 text-sm ${isCharacterActive() ? 'text-green-200' : 'text-red-200'}`}>
                 ({currentCharacter.activeHours.start}:00-{currentCharacter.activeHours.end}:00)
               </span>
             )}
           </header>
 
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          <div className="flex-1 overflow-y-auto p-2 md:p-4 space-y-4">
             {currentConversation?.messages.map((msg, idx) => (
               <div
                 key={idx}
@@ -601,7 +606,7 @@ export default function Home() {
               >
                 <div className="flex flex-col">
                   <div
-                    className={`rounded-xl px-4 py-2 max-w-xs ${
+                    className={`rounded-xl px-3 py-2 max-w-xs sm:max-w-sm md:max-w-md lg:max-w-lg ${
                       msg.sender === 'user'
                         ? 'bg-green-400 text-white rounded-br-none'
                         : `${isDarkMode ? 'bg-gray-700 text-white' : 'bg-white text-black'} border rounded-bl-none`
@@ -618,7 +623,7 @@ export default function Home() {
                     <span>{formatTime(msg.timestamp)}</span>
                     {msg.sender === 'user' && (
                       <span className="ml-1">
-                        {msg.isRead ? '✓✓' : '✓'}
+                        {msg.isRead ? '既読' : '未読'}
                       </span>
                     )}
                   </div>
@@ -632,12 +637,18 @@ export default function Home() {
 
       {/* メッセージ入力エリア - サイドバーに侵食しないよう調整 */}
       <div 
-        className={`p-3 ${bgColor} flex items-center ${borderColor} border-t`}
-        style={{ marginLeft: sidebarOpen ? '320px' : '0px', transition: 'margin-left 0.3s' }}
+        className={`p-2 md:p-3 ${bgColor} flex items-center ${borderColor} border-t`}
+        style={{ 
+          marginLeft: sidebarOpen ? 
+            (window.innerWidth >= 1024 ? '320px' : 
+             window.innerWidth >= 768 ? '288px' : 
+             window.innerWidth >= 640 ? '256px' : '0px') : '0px', 
+          transition: 'margin-left 0.3s' 
+        }}
       >
         <input
           type="text"
-          className={`flex-1 px-4 py-2 border rounded mr-2 ${bgColor} ${textColor} ${borderColor}`}
+          className={`flex-1 px-3 md:px-4 py-2 border rounded mr-2 text-sm md:text-base ${bgColor} ${textColor} ${borderColor}`}
           placeholder="メッセージを入力"
           value={input}
           onChange={(e) => setInput(e.target.value)}
@@ -645,8 +656,8 @@ export default function Home() {
         />
         <button
           onClick={sendMessage}
-          className="bg-green-500 text-white px-4 py-2 rounded font-bold"
-          disabled={!isCharacterActive()}
+          className="bg-green-500 text-white px-3 md:px-4 py-2 rounded font-bold text-sm md:text-base"
+          disabled={currentCharacter?.useActiveHours && !isCharacterActive()}
         >
           送信
         </button>
@@ -687,32 +698,42 @@ export default function Home() {
                 />
               </div>
               <div>
-                <label className={`block text-sm font-medium mb-1 ${textColor}`}>アクティブ時間</label>
-                <div className="flex space-x-2">
+                <label className={`block text-sm font-medium mb-1 ${textColor}`}>
                   <input
-                    type="number"
-                    min="0"
-                    max="23"
-                    value={newCharacter.activeHours.start}
-                    onChange={(e) => setNewCharacter(prev => ({ 
-                      ...prev, 
-                      activeHours: { ...prev.activeHours, start: parseInt(e.target.value) }
-                    }))}
-                    className={`w-1/2 px-3 py-2 border rounded ${bgColor} ${textColor} ${borderColor}`}
+                    type="checkbox"
+                    checked={newCharacter.useActiveHours}
+                    onChange={(e) => setNewCharacter(prev => ({ ...prev, useActiveHours: e.target.checked }))}
+                    className="mr-2"
                   />
-                  <span className={textColor}>〜</span>
-                  <input
-                    type="number"
-                    min="0"
-                    max="23"
-                    value={newCharacter.activeHours.end}
-                    onChange={(e) => setNewCharacter(prev => ({ 
-                      ...prev, 
-                      activeHours: { ...prev.activeHours, end: parseInt(e.target.value) }
-                    }))}
-                    className={`w-1/2 px-3 py-2 border rounded ${bgColor} ${textColor} ${borderColor}`}
-                  />
-                </div>
+                  アクティブ時間を使用する
+                </label>
+                {newCharacter.useActiveHours && (
+                  <div className="flex space-x-2 mt-2">
+                    <input
+                      type="number"
+                      min="0"
+                      max="23"
+                      value={newCharacter.activeHours.start}
+                      onChange={(e) => setNewCharacter(prev => ({ 
+                        ...prev, 
+                        activeHours: { ...prev.activeHours, start: parseInt(e.target.value) }
+                      }))}
+                      className={`w-1/2 px-3 py-2 border rounded ${bgColor} ${textColor} ${borderColor}`}
+                    />
+                    <span className={textColor}>〜</span>
+                    <input
+                      type="number"
+                      min="0"
+                      max="23"
+                      value={newCharacter.activeHours.end}
+                      onChange={(e) => setNewCharacter(prev => ({ 
+                        ...prev, 
+                        activeHours: { ...prev.activeHours, end: parseInt(e.target.value) }
+                      }))}
+                      className={`w-1/2 px-3 py-2 border rounded ${bgColor} ${textColor} ${borderColor}`}
+                    />
+                  </div>
+                )}
               </div>
               <div>
                 <label className={`block text-sm font-medium mb-1 ${textColor}`}>テーマカラー</label>
@@ -775,32 +796,42 @@ export default function Home() {
                 />
               </div>
               <div>
-                <label className={`block text-sm font-medium mb-1 ${textColor}`}>アクティブ時間</label>
-                <div className="flex space-x-2">
+                <label className={`block text-sm font-medium mb-1 ${textColor}`}>
                   <input
-                    type="number"
-                    min="0"
-                    max="23"
-                    value={editingCharacter.activeHours.start}
-                    onChange={(e) => setEditingCharacter(prev => prev ? ({ 
-                      ...prev, 
-                      activeHours: { ...prev.activeHours, start: parseInt(e.target.value) }
-                    }) : null)}
-                    className={`w-1/2 px-3 py-2 border rounded ${bgColor} ${textColor} ${borderColor}`}
+                    type="checkbox"
+                    checked={editingCharacter.useActiveHours}
+                    onChange={(e) => setEditingCharacter(prev => prev ? ({ ...prev, useActiveHours: e.target.checked }) : null)}
+                    className="mr-2"
                   />
-                  <span className={textColor}>〜</span>
-                  <input
-                    type="number"
-                    min="0"
-                    max="23"
-                    value={editingCharacter.activeHours.end}
-                    onChange={(e) => setEditingCharacter(prev => prev ? ({ 
-                      ...prev, 
-                      activeHours: { ...prev.activeHours, end: parseInt(e.target.value) }
-                    }) : null)}
-                    className={`w-1/2 px-3 py-2 border rounded ${bgColor} ${textColor} ${borderColor}`}
-                  />
-                </div>
+                  アクティブ時間を使用する
+                </label>
+                {editingCharacter.useActiveHours && (
+                  <div className="flex space-x-2 mt-2">
+                    <input
+                      type="number"
+                      min="0"
+                      max="23"
+                      value={editingCharacter.activeHours.start}
+                      onChange={(e) => setEditingCharacter(prev => prev ? ({ 
+                        ...prev, 
+                        activeHours: { ...prev.activeHours, start: parseInt(e.target.value) }
+                      }) : null)}
+                      className={`w-1/2 px-3 py-2 border rounded ${bgColor} ${textColor} ${borderColor}`}
+                    />
+                    <span className={textColor}>〜</span>
+                    <input
+                      type="number"
+                      min="0"
+                      max="23"
+                      value={editingCharacter.activeHours.end}
+                      onChange={(e) => setEditingCharacter(prev => prev ? ({ 
+                        ...prev, 
+                        activeHours: { ...prev.activeHours, end: parseInt(e.target.value) }
+                      }) : null)}
+                      className={`w-1/2 px-3 py-2 border rounded ${bgColor} ${textColor} ${borderColor}`}
+                    />
+                  </div>
+                )}
               </div>
               <div>
                 <label className={`block text-sm font-medium mb-1 ${textColor}`}>テーマカラー</label>
