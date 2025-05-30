@@ -26,7 +26,8 @@ export default function Home() {
   const sendMessage = async () => {
     if (!input.trim()) return
 
-    const userMsg = { sender: 'user', text: input }
+    const userMessage = input.trim()
+    const userMsg = { sender: 'user', text: userMessage }
     setMessages((prev) => [...prev, userMsg])
     setInput('')
 
@@ -39,14 +40,19 @@ export default function Home() {
         },
         body: JSON.stringify({
           model,
-          messages: [{ role: 'user', content: input }]
+          messages: [{ role: 'user', content: userMessage }]
         })
       })
+
+      if (!res.ok) {
+        throw new Error(`HTTP error! status: ${res.status}`)
+      }
 
       const data = await res.json()
       const reply = data.choices?.[0]?.message?.content || 'エラーが発生しました'
       setMessages((prev) => [...prev, { sender: 'ai', text: reply }])
     } catch (error) {
+      console.error('API Error:', error)
       setMessages((prev) => [...prev, { sender: 'ai', text: 'API通信エラーが発生しました' }])
     }
   }
