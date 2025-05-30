@@ -32,11 +32,10 @@ export default function Home() {
     setInput('')
 
     try {
-      const response = await fetch('https://llm.chutes.com/v1/chat/completions', {
+      const response = await fetch('/api/chutes', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer cpk_ed4118b93283415581ce5204721bd861.429d755b1300581582cc392083a49856.8h5PsYWKyHyj1D1QneemTMBwZKFNKUQy'
         },
         body: JSON.stringify({
           model,
@@ -49,7 +48,7 @@ export default function Home() {
       }
 
       const data = await response.json()
-      const reply = data.choices?.[0]?.message?.content || 'エラーが発生しました'
+      const reply = data.reply || 'エラーが発生しました'
       setMessages((prev) => [...prev, { sender: 'ai', text: reply }])
     } catch (error) {
       console.error('API Error:', error)

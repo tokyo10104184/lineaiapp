@@ -13,11 +13,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const apiRes = await fetch('https://llm.chutes.ai/v1/chat/completions', {
+    const apiKey = process.env.CHUTES_API_KEY || 'cpk_ed4118b93283415581ce5204721bd861.429d755b1300581582cc392083a49856.8h5PsYWKyHyj1D1QneemTMBwZKFNKUQy';
+    const apiRes = await fetch('https://llm.chutes.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${process.env.CHUTES_API_KEY}`,
+        Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
         model,
