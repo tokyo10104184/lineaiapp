@@ -3,9 +3,10 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import {
     FaUserCircle, FaImage, FaPlus, FaEdit, FaTimes, FaRobot, FaTrash, FaPaperPlane,
     FaBars, FaQuestionCircle, FaPaperclip, FaTimesCircle, FaQuoteLeft, FaComments,
-    FaPlay, FaStop, FaFistRaised, FaBalanceScale, FaCommentDots, FaSave, FaUndo
+    FaPlay, FaStop, FaFistRaised, FaBalanceScale, FaCommentDots, FaSave, FaUndo, FaUsers
 } from 'react-icons/fa';
 import ConfirmationDialog from '../components/ui/ConfirmationDialog'; // Added import
+import GroupChatCreationModal from '../components/GroupChatCreationModal';
 
 // --- Interfaces ---
 interface Message {
@@ -42,6 +43,8 @@ interface Conversation {
   charToCharMode?: 'auto' | 'battle' | 'debate';
   debateTheme?: string;
   participantModels?: [string, string];
+  isGroupChat?: boolean;
+  groupParticipantIds?: string[];
 }
 
 interface ChutesApiRequestBody {
@@ -168,6 +171,7 @@ export default function Home() {
   const [showDeleteCharacterDialog, setShowDeleteCharacterDialog] = useState(false); // Added state
   const [characterToDeleteId, setCharacterToDeleteId] = useState<string | null>(null); // Added state
   const [characterDeleteMessage, setCharacterDeleteMessage] = useState(''); // Added state
+  const [showGroupChatModal, setShowGroupChatModal] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const chatMessagesContainerRef = useRef<HTMLDivElement>(null)
@@ -210,6 +214,8 @@ export default function Home() {
           charToCharMode: conv.charToCharMode || 'auto',
           debateTheme: conv.debateTheme || undefined,
           participantModels: conv.participantModels || undefined,
+          isGroupChat: conv.isGroupChat || false,
+          groupParticipantIds: conv.groupParticipantIds || [],
         }));
         setConversations(loadedConversations);
         initialCharacters = data.characters || [];
@@ -349,6 +355,35 @@ export default function Home() {
     if (window.innerWidth < 1024) setSidebarOpen(false);
   }, [currentCharacterId, characters, conversations]);
 
+  const handleCreateGroupChat = useCallback((selectedCharacterIds: string[], groupNameInput: string) => {
+    const newConvId = `group-${Date.now()}`;
+    let title = groupNameInput;
+    if (!title) {
+      const selectedChars = characters.filter(char => selectedCharacterIds.includes(char.id));
+      title = `グループ: ${selectedChars.map(c => c.name).slice(0, 3).join(', ')}`;
+      if (selectedChars.length > 3) {
+        title += ` 他${selectedChars.length - 3}名`;
+      }
+    }
+
+    const newConv: Conversation = {
+      id: newConvId,
+      title,
+      messages: [],
+      characterId: '', // Not a 1-on-1 chat
+      isGroupChat: true,
+      groupParticipantIds: selectedCharacterIds,
+      isCharToCharConversation: false, // Explicitly false for group chats
+    };
+
+    setConversations(prev => [newConv, ...prev]);
+    setCurrentConversationId(newConvId);
+    setCurrentCharacterId(''); // No single current character for group chat
+    setShowGroupChatModal(false);
+    setIsAutoReplying(false);
+    if (window.innerWidth < 1024) setSidebarOpen(false);
+  }, [characters]);
+
   useEffect(() => {
     if (currentConversation?.isCharToCharConversation) return;
     if (characters.length > 0 && !characters.some(c => c.id === currentCharacterId)) {
@@ -447,140 +482,233 @@ export default function Home() {
   const sendMessage = useCallback(async (messageContent?: string, editedMessageId?: string) => {
     const textToSend = messageContent || input;
     const isImageMessage = !!imageToSend && !editedMessageId;
-    const imageDataUrl = isImageMessage ? imageToSend?.url : undefined;
+    const localImageDataUrl = isImageMessage ? imageToSend?.url : undefined; // Renamed to avoid conflict
 
-    if (currentConversation?.isCharToCharConversation) {
-        alert("キャラクター同士の会話中は手動でメッセージを送信できません。");
-        return;
-    }
-    if (!currentCharacterForNormalChat) {
-        alert("会話相手のキャラクターが選択されていません。");
-        return;
-    }
-    if (!currentModelSupportsImage && isImageMessage) {
-      alert('選択中のモデルは画像送信に対応していません。DeepSeek系のモデルを選択してください。');
-      setIsSending(false);
-      return;
-    }
     if ((!textToSend.trim() && !isImageMessage) || !currentConversation || isSending) {
         return;
     }
 
-    const isOffline = currentCharacterForNormalChat.useActiveHours && !isCharacterActive(currentCharacterForNormalChat)
-    if (isOffline && !window.confirm(`${currentCharacterForNormalChat.name}は現在オフラインです。メッセージは送信されますが、返信はアクティブ時間までお待ちください。送信しますか？`)) {
-        setIsSending(false);
-        return;
-    }
-
     setIsSending(true);
-
     let userMessageIdForReadUpdate = '';
 
-    if (editedMessageId) {
-        setConversations(prevConvs => prevConvs.map(conv => {
-            if (conv.id === currentConversationId) {
-                const messageIndex = conv.messages.findIndex(msg => msg.id === editedMessageId);
-                if (messageIndex === -1) return conv;
-                const updatedMessages = conv.messages.slice(0, messageIndex + 1);
-                updatedMessages[messageIndex] = {
-                    ...updatedMessages[messageIndex],
-                    text: textToSend,
-                    isEditing: false,
-                    timestamp: new Date(),
-                };
-                return { ...conv, messages: updatedMessages };
-            }
-            return conv;
-        }));
-        setEditingMessageId(null);
-        setEditingMessageText('');
-    } else {
-        const userMessage: Message = {
-            id: `${Date.now()}-user`, sender: 'user', text: textToSend, timestamp: new Date(),
-            isRead: false, imageUrl: imageDataUrl
-        };
-        userMessageIdForReadUpdate = userMessage.id;
-        setConversations(prev => prev.map(conv =>
-            conv.id === currentConversationId ? { ...conv, messages: [...conv.messages, userMessage] } : conv
-        ));
-        setTimeout(() => {
-            setConversations(prev => prev.map(conv => {
+    try {
+        // Add user message (common for both group and 1-on-1)
+        if (editedMessageId) {
+            setConversations(prevConvs => prevConvs.map(conv => {
                 if (conv.id === currentConversationId) {
-                    return { ...conv, messages: conv.messages.map(msg => msg.id === userMessageIdForReadUpdate ? { ...msg, isRead: true } : msg) };
+                    const messageIndex = conv.messages.findIndex(msg => msg.id === editedMessageId);
+                    if (messageIndex === -1) return conv;
+                    const updatedMessages = conv.messages.slice(0, messageIndex + 1); // Keep history up to this point
+                    updatedMessages[messageIndex] = {
+                        ...updatedMessages[messageIndex],
+                        text: textToSend,
+                        isEditing: false,
+                        timestamp: new Date(),
+                        imageUrl: localImageDataUrl, // Add image if it was part of edit
+                    };
+                    return { ...conv, messages: updatedMessages };
                 }
                 return conv;
             }));
-        }, 750);
-    }
-
-    if (!messageContent && !editedMessageId) setInput('');
-    if (isImageMessage) setImageToSend(null);
-
-    const currentConvsSnapshot = await new Promise<Conversation[]>(resolve =>
-        setConversations(prev => {
-            resolve(JSON.parse(JSON.stringify(prev)));
-            return prev;
-        })
-    );
-
-    const currentConvSnapshot = currentConvsSnapshot.find(c => c.id === currentConversationId);
-
-    if (!currentConvSnapshot || !currentCharacterForNormalChat) {
-        setIsSending(false);
-        return;
-    }
-
-    try {
-      const messagesForApiContext = currentConvSnapshot.messages;
-      const historyForApi = messagesForApiContext.slice(-API_MESSAGE_HISTORY_COUNT).map(msg => {
-        let content = msg.text;
-        if (msg.imageUrl && msg.sender === 'user') {
-            content = `${content} (ユーザーがこの画像を添付しました。画像の内容をよく見て、関連する返答をしてください。)`;
-        } else if (msg.imageUrl) {
-            content = `${content} (画像添付あり)`;
+            setEditingMessageId(null);
+            setEditingMessageText('');
+        } else {
+            const userMessage: Message = {
+                id: `${Date.now()}-user`, sender: 'user', text: textToSend, timestamp: new Date(),
+                isRead: false, imageUrl: localImageDataUrl
+            };
+            userMessageIdForReadUpdate = userMessage.id;
+            setConversations(prev => prev.map(conv =>
+                conv.id === currentConversationId ? { ...conv, messages: [...conv.messages, userMessage] } : conv
+            ));
+            // Optimistic read update for user message in 1-on-1, handled differently in group
+            if (!currentConversation.isGroupChat) {
+                setTimeout(() => {
+                    setConversations(prev => prev.map(conv => {
+                        if (conv.id === currentConversationId) {
+                            return { ...conv, messages: conv.messages.map(msg => msg.id === userMessageIdForReadUpdate ? { ...msg, isRead: true } : msg) };
+                        }
+                        return conv;
+                    }));
+                }, 750);
+            }
         }
-        return {
-          role: msg.sender === 'user' ? 'user' : 'assistant',
-          content: content.replace(/\[感情:.+?\]/, '').trim()
+
+        if (!messageContent && !editedMessageId) setInput('');
+        if (isImageMessage) setImageToSend(null);
+
+
+        // --- Post-User Message Logic: Group Chat vs 1-on-1 ---
+        const latestConversationsState = await new Promise<Conversation[]>(resolve => setConversations(prev => { resolve(prev); return prev; }));
+        const activeConversation = latestConversationsState.find(c => c.id === currentConversationId);
+
+        if (!activeConversation) {
+            console.error("Error: Active conversation not found after adding user message.");
+            setIsSending(false);
+            return;
+        }
+
+        if (activeConversation.isGroupChat && activeConversation.groupParticipantIds) {
+            let tempMessagesForHistory: Message[] = [...activeConversation.messages];
+
+            for (const aiCharacterId of activeConversation.groupParticipantIds) {
+                const character = characters.find(c => c.id === aiCharacterId);
+                if (!character) {
+                    console.warn(`Group chat: Character ${aiCharacterId} not found. Skipping.`);
+                    continue;
+                }
+                 // Check for offline status specific to group chat member, if desired.
+                // For simplicity here, we'll assume group members always respond.
+                // const isAIOffline = character.useActiveHours && !isCharacterActive(character);
+                // if (isAIOffline) { ... add offline message and continue ... }
+
+
+                const historyForApi = tempMessagesForHistory.slice(-API_MESSAGE_HISTORY_COUNT).map(msg => {
+                    let content = msg.text;
+                    // Add image indicators to history if applicable
+                    if (msg.imageUrl && msg.sender === 'user') {
+                        content = `${content} (ユーザーがこの画像を添付しました。画像の内容をよく見て、関連する返答をしてください。)`;
+                    } else if (msg.imageUrl) {
+                        content = `${content} (画像添付あり)`;
+                    }
+                    return {
+                        role: msg.sender === 'user' ? 'user' : (msg.sender === aiCharacterId ? 'assistant' : 'user'), // Treat other AIs' messages as 'user' for current AI's context
+                        content: content.replace(/\[感情:.+?\]/, '').trim()
+                    };
+                });
+
+                const messagesPayload = [{ role: 'system', content: character.systemPrompt }, ...historyForApi];
+                const apiRequestBody: ChutesApiRequestBody = { model, messages: messagesPayload, temperature, useCensorship };
+
+                if (localImageDataUrl && currentModelSupportsImage) { // User's image sent to all AIs
+                    apiRequestBody.imageDataUrl = localImageDataUrl;
+                }
+
+                try {
+                    const response = await fetch('/api/chutes', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(apiRequestBody)
+                    });
+
+                    if (!response.ok) {
+                        const errorData = await response.text();
+                        throw new Error(`HTTP error! status: ${response.status}, message: ${errorData} for ${character.name}`);
+                    }
+                    const data = await response.json();
+                    let rawReply = data.reply || 'エラーが発生しました。応答がありません。';
+                    let cleanedReply = cleanAIReply(rawReply);
+                    const emotion = extractEmotion(cleanedReply);
+                    const finalReplyText = cleanedReply.replace(/\[感情:.+?\]/, '').trim();
+
+                    const aiMessage: Message = {
+                        id: `${Date.now()}-${aiCharacterId}`, sender: aiCharacterId,
+                        text: finalReplyText, timestamp: new Date(), emotion: emotion, isRead: true // Group messages are immediately "read" by other AIs in context
+                    };
+
+                    setConversations(prev => prev.map(conv =>
+                        conv.id === currentConversationId ? { ...conv, messages: [...conv.messages, aiMessage] } : conv
+                    ));
+                    tempMessagesForHistory.push(aiMessage); // Add to temp history for next AI
+
+                } catch (error) {
+                    console.error(`API Error for ${character.name} in group chat:`, error);
+                    const errorMessage: Message = {
+                        id: `${Date.now()}-error-${aiCharacterId}`, sender: aiCharacterId,
+                        text: `${character.name}からの応答生成中にエラーが発生しました。`,
+                        timestamp: new Date(), emotion: '悲しみ'
+                    };
+                    setConversations(prev => prev.map(conv =>
+                        conv.id === currentConversationId ? { ...conv, messages: [...conv.messages, errorMessage] } : conv
+                    ));
+                    tempMessagesForHistory.push(errorMessage); // Add error to temp history
+                }
+            }
+        } else { // 1-on-1 chat logic
+            if (!currentCharacterForNormalChat) {
+                alert("会話相手のキャラクターが選択されていません。");
+                setIsSending(false); // Already set true, ensure it's reset if we bail early
+                return;
+            }
+            const isOffline = currentCharacterForNormalChat.useActiveHours && !isCharacterActive(currentCharacterForNormalChat);
+            if (isOffline && !window.confirm(`${currentCharacterForNormalChat.name}は現在オフラインです。メッセージは送信されますが、返信はアクティブ時間までお待ちください。送信しますか？`)) {
+                 setIsSending(false);
+                 return;
+            }
+            if (!currentModelSupportsImage && isImageMessage && !editedMessageId) { // check !editedMessageId for new images
+              alert('選択中のモデルは画像送信に対応していません。DeepSeek系のモデルを選択してください。');
+              setIsSending(false);
+              return;
+            }
+
+
+            const messagesForApiContext = activeConversation.messages;
+            const historyForApi = messagesForApiContext.slice(-API_MESSAGE_HISTORY_COUNT).map(msg => {
+                let content = msg.text;
+                if (msg.imageUrl && msg.sender === 'user') {
+                    content = `${content} (ユーザーがこの画像を添付しました。画像の内容をよく見て、関連する返答をしてください。)`;
+                } else if (msg.imageUrl) {
+                    content = `${content} (画像添付あり)`;
+                }
+                return {
+                    role: msg.sender === 'user' ? 'user' : 'assistant',
+                    content: content.replace(/\[感情:.+?\]/, '').trim()
+                };
+            });
+
+            const messagesPayload = [{ role: 'system', content: currentCharacterForNormalChat.systemPrompt }, ...historyForApi];
+            const apiRequestBody: ChutesApiRequestBody = { model, messages: messagesPayload, temperature, useCensorship };
+            if (isImageMessage && localImageDataUrl && currentModelSupportsImage && !editedMessageId) {
+                apiRequestBody.imageDataUrl = localImageDataUrl;
+            }
+
+            const response = await fetch('/api/chutes', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(apiRequestBody)
+            });
+
+            if (!response.ok) { const errorData = await response.text(); throw new Error(`HTTP error! status: ${response.status}, message: ${errorData}`); }
+            const data = await response.json();
+            let rawReply = data.reply || 'エラーが発生しました。応答がありません。';
+            let cleanedReply = cleanAIReply(rawReply);
+            const emotion = extractEmotion(cleanedReply);
+            const finalReplyText = cleanedReply.replace(/\[感情:.+?\]/, '').trim();
+
+            const aiMessage: Message = {
+                id: `${Date.now()}-ai`,
+                sender: currentCharacterForNormalChat.id,
+                text: finalReplyText, timestamp: new Date(), emotion: emotion, isRead: false
+            };
+            setConversations(prev => prev.map(conv =>
+                conv.id === currentConversationId ? { ...conv, messages: [...conv.messages, aiMessage] } : conv
+            ));
+        }
+    } catch (error) { // Catch all errors from the entire send process
+        console.error('Overall sendMessage Error:', error);
+        // Determine context for error message if possible
+        const errorSenderId = currentConversation?.isGroupChat ? 'system' : (currentCharacterForNormalChat?.id || 'system');
+        const errorMessageText = currentConversation?.isGroupChat
+            ? 'グループチャットのメッセージ処理中にエラーが発生しました。'
+            : '応答の生成中にエラーが発生しました。後で再試行してください。';
+
+        const errorMessage: Message = {
+            id: `${Date.now()}-error-global`, sender: errorSenderId,
+            text: errorMessageText,
+            timestamp: new Date(), emotion: '悲しみ'
         };
-      });
-
-      const messagesPayload = [ { role: 'system', content: currentCharacterForNormalChat.systemPrompt }, ...historyForApi ];
-      const apiRequestBody: ChutesApiRequestBody = { model, messages: messagesPayload, temperature, useCensorship };
-      if (isImageMessage && imageDataUrl && currentModelSupportsImage && !editedMessageId) {
-          apiRequestBody.imageDataUrl = imageDataUrl;
-      }
-
-      const response = await fetch('/api/chutes', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(apiRequestBody)
-      })
-
-      if (!response.ok) { const errorData = await response.text(); throw new Error(`HTTP error! status: ${response.status}, message: ${errorData}`) }
-      const data = await response.json()
-      let rawReply = data.reply || 'エラーが発生しました。応答がありません。';
-      let cleanedReply = cleanAIReply(rawReply);
-      const emotion = extractEmotion(cleanedReply);
-      const finalReplyText = cleanedReply.replace(/\[感情:.+?\]/, '').trim();
-
-      const aiMessage: Message = {
-          id: `${Date.now()}-ai`,
-          sender: currentCharacterForNormalChat.id,
-          text: finalReplyText, timestamp: new Date(), emotion: emotion, isRead: false
-      }
-      setConversations(prev => prev.map(conv =>
-          conv.id === currentConversationId ? { ...conv, messages: [...conv.messages, aiMessage] } : conv
-      ));
-    } catch (error) {
-      console.error('API Error:', error)
-      const errorMessage: Message = {
-          id: `${Date.now()}-error`, sender: currentCharacterForNormalChat.id,
-          text: '応答の生成中にエラーが発生しました。後で再試行してください。',
-          timestamp: new Date(), emotion: '悲しみ'
-      }
-      setConversations(prev => prev.map(conv => conv.id === currentConversationId ? { ...conv, messages: [...conv.messages, errorMessage] } : conv ))
-    } finally { setIsSending(false) }
-  }, [input, imageToSend, currentConversationId, currentCharacterForNormalChat, currentModelSupportsImage, isSending, isCharacterActive, model, temperature, useCensorship, conversations, currentConversation]);
+        setConversations(prev => {
+            const targetConv = prev.find(c => c.id === currentConversationId);
+            if (targetConv) {
+                return prev.map(conv => conv.id === currentConversationId ? { ...conv, messages: [...conv.messages, errorMessage] } : conv);
+            }
+            // If currentConversationId somehow became invalid, this is a fallback, though less ideal.
+            // Consider adding to a general error log or a default conversation if one exists.
+            console.error("Could not add error message to specific conversation, ID was: ", currentConversationId);
+            return prev;
+        });
+    } finally {
+        setIsSending(false);
+    }
+  }, [input, imageToSend, currentConversationId, currentCharacterForNormalChat, currentModelSupportsImage, isSending, isCharacterActive, model, temperature, useCensorship, conversations, currentConversation, characters]);
 
 
   const sendQuickMessage = useCallback((text: string) => {
@@ -1262,6 +1390,13 @@ export default function Home() {
                     title="キャラクター同士で会話">
                     <FaComments size={14} />
                 </button>
+                <button
+                    onClick={() => setShowGroupChatModal(true)}
+                    disabled={characters.length < 2}
+                    className={`p-2 rounded-full text-white transition-all duration-150 bg-purple-500 hover:bg-purple-600 active:bg-purple-700 disabled:bg-slate-400 disabled:hover:bg-slate-400 shadow-md`}
+                    title="グループチャット作成">
+                    <FaUsers size={14} />
+                </button>
               </div>
             </div>
             <div className="space-y-1.5 max-h-40 md:max-h-52 lg:max-h-40 overflow-y-auto pr-1 custom-scrollbar">
@@ -1379,7 +1514,25 @@ export default function Home() {
           <div className={`p-4 border-b flex items-center justify-between shadow-sm ${chatHeaderActualBgClass} ${lineThemeActive ? (isLineDark ? 'border-slate-700' : 'border-transparent') : generalBorderColor }`} style={chatHeaderActualBgStyle} >
             <div className="flex items-center min-w-0">
                 <button onClick={() => setSidebarOpen(!sidebarOpen)} className={`lg:hidden mr-3 p-2.5 rounded-md hover:${isDarkMode || (lineThemeActive && isLineDark)?'bg-slate-700/70':'bg-slate-200/70'} ${chatHeaderActualTextColor} transition-colors`} title="メニューを開閉"> <FaBars size={18} /> </button>
-                {currentConversation?.isCharToCharConversation && currentConversation.participantCharacterIds ? (
+
+                {currentConversation && currentConversation.isGroupChat && currentConversation.groupParticipantIds ? (
+                    <>
+                        <div className="flex -space-x-3 mr-3">
+                            {currentConversation.groupParticipantIds.slice(0, 5).map(id => {
+                                const char = characters.find(c => c.id === id);
+                                if (!char) return null;
+                                return (
+                                    <div key={id} className="text-2xl w-9 h-9 flex items-center justify-center rounded-full shadow-sm border-2 border-white dark:border-slate-800" style={{backgroundColor: char.color || '#A0AEC0'}} title={char.name}>
+                                        {char.icon}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                        <h2 className={`text-lg font-semibold truncate ${chatHeaderActualTextColor}`}>
+                            {currentConversation.title || "Group Chat"}
+                        </h2>
+                    </>
+                ) : currentConversation?.isCharToCharConversation && currentConversation.participantCharacterIds ? (
                     <>
                         <div className="flex -space-x-3 mr-3">
                             {characters.find(c=>c.id === currentConversation.participantCharacterIds![0]) && <div className="text-2xl w-9 h-9 flex items-center justify-center rounded-full shadow-sm border-2 border-white dark:border-slate-800" style={{backgroundColor: characters.find(c=>c.id === currentConversation.participantCharacterIds![0])?.color || '#A0AEC0'}}>{characters.find(c=>c.id === currentConversation.participantCharacterIds![0])?.icon}</div>}
@@ -1613,6 +1766,16 @@ export default function Home() {
           }}
           confirmText="削除"
           cancelText="キャンセル"
+        />
+      )}
+
+      {showGroupChatModal && (
+        <GroupChatCreationModal
+            isOpen={showGroupChatModal}
+            onClose={() => setShowGroupChatModal(false)}
+            characters={characters}
+            onCreateGroup={handleCreateGroupChat}
+            isDarkMode={isDarkMode}
         />
       )}
 
