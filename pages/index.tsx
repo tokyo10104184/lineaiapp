@@ -928,13 +928,21 @@ export default function Home() {
 
   const deleteConversationCallback = useCallback((e: React.MouseEvent, conversationIdToDelete: string) => {
     e.stopPropagation();
-    if (!window.confirm('この会話を削除しますか？この操作は元に戻せません。')) return;
-    setConversations(prevConvs => prevConvs.filter(conv => conv.id !== conversationIdToDelete));
-    if (currentConversationId === conversationIdToDelete) { setCurrentConversationId(''); setIsAutoReplying(false); }
+    console.log("deleteConversationCallback called with ID:", conversationIdToDelete);
+    const confirmed = window.confirm('この会話を削除しますか？この操作は元に戻せません。');
+    console.log("window.confirm result:", confirmed);
+    if (!confirmed) return;
+    try {
+      setConversations(prevConvs => prevConvs.filter(conv => conv.id !== conversationIdToDelete));
+      if (currentConversationId === conversationIdToDelete) { setCurrentConversationId(''); setIsAutoReplying(false); }
+    } catch (error) {
+      console.error("Error in deleteConversationCallback:", error);
+    }
   }, [currentConversationId]);
 
   const deleteCharacterCallback = useCallback((e: React.MouseEvent, characterIdToDelete: string) => {
     e.stopPropagation();
+    console.log("deleteCharacterCallback called with ID:", characterIdToDelete);
 
     const relatedConversations = conversations.filter(conv => {
       if (!conv.isCharToCharConversation && conv.characterId === characterIdToDelete) {
@@ -947,6 +955,8 @@ export default function Home() {
     });
 
     const characterName = characters.find(c => c.id === characterIdToDelete)?.name || 'このキャラクター';
+    console.log(`Character Name: ${characterName}, Related Conversations: ${relatedConversations.length}`);
+
     let message = `キャラクター「${characterName}」を削除します。`;
 
     if (relatedConversations.length > 0) {
