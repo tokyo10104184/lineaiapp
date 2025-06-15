@@ -386,6 +386,7 @@ export default function Home() {
 
   useEffect(() => {
     if (currentConversation?.isCharToCharConversation) return;
+    if (currentConversation?.isGroupChat) return;
     if (characters.length > 0 && !characters.some(c => c.id === currentCharacterId)) {
         setCurrentCharacterId(characters[0].id);
         return;
@@ -406,7 +407,7 @@ export default function Home() {
           }
       }
     }
-  }, [currentCharacterId, characters, conversations, createNewConversation, currentConversationId, currentConversation?.isCharToCharConversation]);
+  }, [currentCharacterId, characters, conversations, createNewConversation, currentConversationId, currentConversation?.isCharToCharConversation, currentConversation?.isGroupChat]);
 
 
   const handleConversationSelect = useCallback((convId: string) => {
