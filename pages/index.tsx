@@ -713,8 +713,8 @@ export default function Home() {
 
 
   const sendQuickMessage = useCallback((text: string) => {
-      if (!currentConversation || currentConversation.isCharToCharConversation || !currentCharacterForNormalChat) {
-          alert('通常の会話を選択してください'); return
+      if (!currentConversation || currentConversation.isCharToCharConversation || (!currentConversation.isGroupChat && !currentCharacterForNormalChat)) {
+          alert('通常の会話またはグループチャットを選択してください'); return
       }
       sendMessage(text)
   }, [currentConversation, currentCharacterForNormalChat, sendMessage]);
