@@ -69,7 +69,7 @@ const GroupChatCreationModal: React.FC<GroupChatCreationModalProps> = ({
           </h3>
           <button
             onClick={onClose}
-            className={`p-1.5 rounded-full hover:${isDarkMode ? 'bg-slate-700' : 'bg-slate-200'} transition-colors`}
+            className={`p-1.5 rounded-full ${isDarkMode ? 'hover:bg-slate-700' : 'hover:bg-slate-200'} transition-colors`}
           >
             <FaTimes size={22} />
           </button>
@@ -147,7 +147,7 @@ const GroupChatCreationModal: React.FC<GroupChatCreationModalProps> = ({
         <div className="mt-8 flex flex-col sm:flex-row justify-end items-center gap-3 pt-4 border-t" style={{borderColor: inputBorderColor}}>
           <button
             onClick={onClose}
-            className={`px-6 py-2.5 rounded-lg border ${inputBorderColor} hover:${isDarkMode ? 'bg-slate-700' : 'bg-slate-100'} transition-colors duration-150 w-full sm:w-auto font-medium shadow-sm`}
+            className={`px-6 py-2.5 rounded-lg border ${inputBorderColor} ${isDarkMode ? 'hover:bg-slate-700' : 'hover:bg-slate-100'} transition-colors duration-150 w-full sm:w-auto font-medium shadow-sm`}
           >
             キャンセル
           </button>
