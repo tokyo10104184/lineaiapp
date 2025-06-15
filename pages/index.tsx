@@ -1006,16 +1006,23 @@ export default function Home() {
   }, [currentConversation, characters, currentCharacterForNormalChat]);
 
   const sidebarConversations = useMemo(() => {
-    if (!currentCharacterId && !characters.some(c => c.isPublic)) {
-        return conversations.sort((a,b) => parseInt(b.id) - parseInt(a.id));
-    }
     return conversations
-        .filter(c =>
-            (c.isCharToCharConversation) ||
-            (c.characterId === currentCharacterId && !c.isCharToCharConversation)
-        )
+        .filter(conv => {
+            if (conv.isGroupChat) return true; // Always show group chats
+            if (conv.isCharToCharConversation) return true; // Always show char-to-char chats
+
+            // For 1-on-1 chats:
+            // If a currentCharacterId is selected (meaning user is focused on a 1-on-1 context),
+            // only show 1-on-1 conversations for that specific character.
+            // If no currentCharacterId is selected (e.g., app just loaded, or after viewing a non-1-on-1 chat like a group chat),
+            // show all 1-on-1 chats.
+            if (!conv.isGroupChat && !conv.isCharToCharConversation) { // This is a 1-on-1 chat
+                return !currentCharacterId || conv.characterId === currentCharacterId;
+            }
+            return false; // Should ideally not be reached if all conversation types are handled above
+        })
         .sort((a, b) => parseInt(b.id) - parseInt(a.id));
-  }, [conversations, currentCharacterId, characters]);
+  }, [conversations, currentCharacterId]);
 
   const isLineDark = useMemo(() => lineThemeActive && isDarkMode, [lineThemeActive, isDarkMode]);
   const activeChatBackgroundPalette = useMemo(() => (
@@ -1567,7 +1574,7 @@ export default function Home() {
                 <div className="flex flex-wrap gap-2"> {QUICK_MESSAGES.slice(0,6).map(qm => ( <button key={qm.id} onClick={() => sendQuickMessage(qm.text)} className={`px-3.5 py-1.5 text-xs rounded-full shadow-sm ${ isDarkMode || (lineThemeActive && isLineDark) ? 'bg-slate-600 hover:bg-slate-500 active:bg-slate-400 text-slate-100' : (lineThemeActive ? 'bg-white hover:bg-slate-50 active:bg-slate-100 text-sky-700 border border-sky-300' : 'bg-white hover:bg-slate-200 active:bg-slate-300 text-slate-700 border border-slate-200') } transition-all duration-150 ease-in-out`}> {qm.text} </button> ))} </div>
             </div>
             )}
-          {currentCharacterForNormalChat && currentConversation && !currentConversation.isCharToCharConversation && (
+          {((currentConversation && !currentConversation.isCharToCharConversation && !currentConversation.isGroupChat && currentCharacterForNormalChat) || (currentConversation && currentConversation.isGroupChat)) && (
             <div className={`p-3 border-t ${lineThemeActive ? (isLineDark ? 'border-slate-700' : 'border-sky-200') : generalBorderColor} ${inputBarContainerActualBg} shadow-top-sm`}>
               {imageToSend && (
                 <div className={`mb-2 p-2.5 rounded-lg flex items-center justify-between ${isDarkMode ? 'bg-slate-700' : 'bg-slate-200'}`}>
@@ -1578,7 +1585,7 @@ export default function Home() {
               <div className={`flex items-center space-x-2 p-1.5 rounded-xl shadow-sm ${inputFieldActualBgColor} border ${inputFieldActualBorderColor}`}>
                 <button onClick={() => fileInputRef.current?.click()} className={`p-2.5 rounded-lg ${currentModelSupportsImage ? `hover:${isDarkMode ?'bg-slate-600/70':'bg-slate-200/70'} cursor-pointer` : 'opacity-50 cursor-not-allowed'} ${inputFieldActualTextColor} transition-colors`} title={currentModelSupportsImage ? "画像添付" : "現在のモデルは画像に非対応です"} disabled={!currentModelSupportsImage}> <FaPaperclip size={18}/> </button>
                 <input ref={fileInputRef} id="image-upload-hidden" type="file" accept="image/*" className="hidden" onChange={handleImageFileSelect} disabled={!currentModelSupportsImage}/>
-                <input type="text" value={input} onChange={(e) => setInput(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && !isSending && sendMessage()} placeholder={`${currentCharacterForNormalChat?.name || ''}にメッセージを送信...`} className={`flex-1 px-3 py-2.5 rounded-lg bg-transparent focus:outline-none text-sm sm:text-base ${inputFieldActualTextColor} placeholder-${isDarkMode || (lineThemeActive && isLineDark)?'text-slate-500':'text-slate-400'}`} disabled={isSending} />
+                <input type="text" value={input} onChange={(e) => setInput(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && !isSending && sendMessage()} placeholder={currentConversation?.isGroupChat ? 'グループメッセージを送信...' : `${currentCharacterForNormalChat?.name || ''}にメッセージを送信...`} className={`flex-1 px-3 py-2.5 rounded-lg bg-transparent focus:outline-none text-sm sm:text-base ${inputFieldActualTextColor} placeholder-${isDarkMode || (lineThemeActive && isLineDark)?'text-slate-500':'text-slate-400'}`} disabled={isSending} />
                 <button onClick={() => sendMessage()} disabled={isSending || (!input.trim() && !imageToSend) || (imageToSend && !currentModelSupportsImage) } className={`p-3 rounded-lg text-white transition-all duration-150 ease-in-out ${isSending || (!input.trim() && !imageToSend) || (imageToSend && !currentModelSupportsImage) ? (isDarkMode || (lineThemeActive && isLineDark)?'bg-slate-500 cursor-not-allowed':'bg-slate-400 cursor-not-allowed') : (lineThemeActive && !isLineDark ? 'bg-green-500 hover:bg-green-600 active:bg-green-700' : 'bg-indigo-500 hover:bg-indigo-600 active:bg-indigo-700')} shadow-sm`} title="送信"> {isSending ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : <FaPaperPlane size={18}/>} </button>
               </div>
             </div>
