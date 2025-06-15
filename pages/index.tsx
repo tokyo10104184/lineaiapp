@@ -5,6 +5,7 @@ import {
     FaBars, FaQuestionCircle, FaPaperclip, FaTimesCircle, FaQuoteLeft, FaComments,
     FaPlay, FaStop, FaFistRaised, FaBalanceScale, FaCommentDots, FaSave, FaUndo
 } from 'react-icons/fa';
+import ConfirmationDialog from '@/components/ui/ConfirmationDialog'; // Added import
 
 // --- Interfaces ---
 interface Message {
@@ -161,6 +162,12 @@ export default function Home() {
 
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editingMessageText, setEditingMessageText] = useState<string>('');
+
+  const [showDeleteConversationDialog, setShowDeleteConversationDialog] = useState(false);
+  const [conversationToDeleteId, setConversationToDeleteId] = useState<string | null>(null);
+  const [showDeleteCharacterDialog, setShowDeleteCharacterDialog] = useState(false); // Added state
+  const [characterToDeleteId, setCharacterToDeleteId] = useState<string | null>(null); // Added state
+  const [characterDeleteMessage, setCharacterDeleteMessage] = useState(''); // Added state
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const chatMessagesContainerRef = useRef<HTMLDivElement>(null)
@@ -926,36 +933,71 @@ export default function Home() {
       isDarkMode || (lineThemeActive && isLineDark) ? 'text-slate-500' : 'text-slate-400'
   ), [isDarkMode, lineThemeActive, isLineDark]);
 
-  const deleteConversationCallback = useCallback((e: React.MouseEvent, conversationIdToDelete: string) => {
+  const deleteConversationCallback = useCallback((e: React.MouseEvent, convId: string) => {
     e.stopPropagation();
-    if (!window.confirm('この会話を削除しますか？この操作は元に戻せません。')) return;
-    setConversations(prevConvs => prevConvs.filter(conv => conv.id !== conversationIdToDelete));
-    if (currentConversationId === conversationIdToDelete) { setCurrentConversationId(''); setIsAutoReplying(false); }
-  }, [currentConversationId]);
+    console.log("deleteConversationCallback called with ID:", convId);
+    setConversationToDeleteId(convId);
+    setShowDeleteConversationDialog(true);
+  }, [setConversationToDeleteId, setShowDeleteConversationDialog]); // Updated dependencies
 
-  const deleteCharacterCallback = useCallback((e: React.MouseEvent, characterIdToDelete: string) => {
+  const handleConfirmDeleteConversation = useCallback(() => {
+    if (!conversationToDeleteId) return;
+    console.log("Confirmed deletion for conversation ID:", conversationToDeleteId);
+
+    try {
+      setConversations(prevConvs => prevConvs.filter(conv => conv.id !== conversationToDeleteId));
+      if (currentConversationId === conversationToDeleteId) {
+        setCurrentConversationId('');
+        setIsAutoReplying(false);
+      }
+      console.log("Conversation deleted successfully:", conversationToDeleteId);
+    } catch (error) {
+      console.error("Error in handleConfirmDeleteConversation:", error);
+    } finally {
+      setShowDeleteConversationDialog(false);
+      setConversationToDeleteId(null);
+    }
+  }, [conversationToDeleteId, currentConversationId, setConversations, setCurrentConversationId, setIsAutoReplying, setShowDeleteConversationDialog, setConversationToDeleteId]); // Updated dependencies
+
+  const deleteCharacterCallback = useCallback((e: React.MouseEvent, charId: string) => {
     e.stopPropagation();
+    console.log("deleteCharacterCallback called with ID:", charId);
 
     const relatedConversations = conversations.filter(conv => {
-      if (!conv.isCharToCharConversation && conv.characterId === characterIdToDelete) {
+      if (!conv.isCharToCharConversation && conv.characterId === charId) {
         return true;
       }
-      if (conv.isCharToCharConversation && conv.participantCharacterIds?.includes(characterIdToDelete)) {
+      if (conv.isCharToCharConversation && conv.participantCharacterIds?.includes(charId)) {
         return true;
       }
       return false;
     });
 
-    const characterName = characters.find(c => c.id === characterIdToDelete)?.name || 'このキャラクター';
-    let message = `キャラクター「${characterName}」を削除します。`;
+    const characterName = characters.find(c => c.id === charId)?.name || 'このキャラクター';
+    console.log(`Character Name: ${characterName}, Related Conversations: ${relatedConversations.length}`); // Keep this log
 
+    let message = `キャラクター「${characterName}」を削除します。`;
     if (relatedConversations.length > 0) {
       message += `\n\nこのキャラクターは${relatedConversations.length}件の会話で使用されています。これらの会話もすべて削除されます。`;
     }
     message += `\nよろしいですか？この操作は元に戻せません。`;
 
+    setCharacterToDeleteId(charId);
+    setCharacterDeleteMessage(message);
+    setShowDeleteCharacterDialog(true);
+  }, [conversations, characters, setCharacterToDeleteId, setCharacterDeleteMessage, setShowDeleteCharacterDialog]); // Updated dependencies
 
-    if (window.confirm(message)) {
+  const handleConfirmDeleteCharacter = useCallback(() => {
+    if (!characterToDeleteId) return;
+    console.log("Confirmed deletion for character ID:", characterToDeleteId);
+
+    try {
+      const relatedConversations = conversations.filter(conv => {
+        if (!conv.isCharToCharConversation && conv.characterId === characterToDeleteId) return true;
+        if (conv.isCharToCharConversation && conv.participantCharacterIds?.includes(characterToDeleteId)) return true;
+        return false;
+      });
+
       const remainingConversations = conversations.filter(conv => !relatedConversations.some(rc => rc.id === conv.id));
       setConversations(remainingConversations);
 
@@ -964,18 +1006,39 @@ export default function Home() {
         setIsAutoReplying(false);
       }
 
-      const remainingCharacters = characters.filter(char => char.id !== characterIdToDelete);
+      const remainingCharacters = characters.filter(char => char.id !== characterToDeleteId);
       setCharacters(remainingCharacters);
 
-      if (currentCharacterId === characterIdToDelete) {
+      if (currentCharacterId === characterToDeleteId) {
         if (remainingCharacters.length > 0) {
           setCurrentCharacterId(remainingCharacters[0].id);
         } else {
           setCurrentCharacterId('');
         }
       }
+      console.log("Character and related conversations deleted successfully:", characterToDeleteId);
+    } catch (error) {
+      console.error("Error in handleConfirmDeleteCharacter:", error);
+    } finally {
+      setShowDeleteCharacterDialog(false);
+      setCharacterToDeleteId(null);
+      setCharacterDeleteMessage('');
     }
-  }, [characters, conversations, currentConversationId, currentCharacterId]);
+  }, [
+    characterToDeleteId,
+    conversations,
+    characters,
+    currentConversationId,
+    currentCharacterId,
+    setConversations,
+    setCurrentConversationId,
+    setIsAutoReplying,
+    setCharacters,
+    setCurrentCharacterId,
+    setShowDeleteCharacterDialog,
+    setCharacterToDeleteId,
+    setCharacterDeleteMessage
+  ]); // Updated dependencies
 
   const handleImageFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]; if (!file) return;
@@ -1515,6 +1578,42 @@ export default function Home() {
             )}
           </div>
         </div>
+      )}
+
+      {/* Delete Conversation Confirmation Dialog */}
+      {showDeleteConversationDialog && conversationToDeleteId && (
+        <ConfirmationDialog
+          isOpen={showDeleteConversationDialog}
+          title="会話の削除"
+          message={`会話「${conversations.find(c => c.id === conversationToDeleteId)?.title || '選択された会話'}」を削除しますか？
+この操作は元に戻せません。`}
+          onConfirm={handleConfirmDeleteConversation}
+          onCancel={() => {
+            setShowDeleteConversationDialog(false);
+            setConversationToDeleteId(null);
+            console.log("Conversation deletion cancelled for ID:", conversationToDeleteId);
+          }}
+          confirmText="削除"
+          cancelText="キャンセル"
+        />
+      )}
+
+      {/* Delete Character Confirmation Dialog */}
+      {showDeleteCharacterDialog && characterToDeleteId && (
+        <ConfirmationDialog
+          isOpen={showDeleteCharacterDialog}
+          title={`キャラクター「${characters.find(c => c.id === characterToDeleteId)?.name || ''}」の削除`}
+          message={characterDeleteMessage}
+          onConfirm={handleConfirmDeleteCharacter}
+          onCancel={() => {
+            setShowDeleteCharacterDialog(false);
+            setCharacterToDeleteId(null);
+            setCharacterDeleteMessage('');
+            console.log("Character deletion cancelled for ID:", characterToDeleteId);
+          }}
+          confirmText="削除"
+          cancelText="キャンセル"
+        />
       )}
 
        <style jsx global>{`
