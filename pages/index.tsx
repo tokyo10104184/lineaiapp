@@ -1312,34 +1312,39 @@ export default function Home() {
                     </div>
                 </div>
             ) : (
-                <div className={`relative rounded-xl px-3.5 py-2.5 shadow-md break-words min-w-[70px] ${bubbleClass}`}
-                  style={ characterForMessage && !messageSenderIsUser && msg.emotion && EMOTION_COLORS[msg.emotion as keyof typeof EMOTION_COLORS] && !lineThemeActive && !currentConversation?.isCharToCharConversation ? { borderLeft: justifyContentClass === 'justify-start' ? `4px solid ${EMOTION_COLORS[msg.emotion as keyof typeof EMOTION_COLORS]}` : '', borderRight: justifyContentClass === 'justify-end' ? `4px solid ${EMOTION_COLORS[msg.emotion as keyof typeof EMOTION_COLORS]}`:'' } : {} } >
-                  {msg.imageUrl && ( <img src={msg.imageUrl} alt="送信された画像" className="max-w-full max-h-60 rounded-lg mb-2 cursor-pointer shadow-sm" onClick={() => window.open(msg.imageUrl, '_blank')} /> )}
-                  {msg.text && <span className={`whitespace-pre-wrap ${messageTextColorClass}`}>{msg.text}</span>}
-                  {!msg.text && msg.imageUrl && <span className={`${messageTextColorClass} italic text-sm`}>画像</span>}
-                </div>
-            )}
-            {!isCurrentlyEditingThisMessage && (
-                <div className={`text-xs mt-0.5 flex items-center ${justifyContentClass === 'justify-end' ? 'pr-1' : 'pl-1'} ${timeAndReadStatusColor}`}>
-                {msg.sender === 'user' && ( <span className={`mr-1.5 ${msg.isRead ? timeAndReadStatusColor : 'text-transparent'}`}> {msg.isRead ? '既読' : '送信済'} </span> )}
-                <span>{formatTime(msg.timestamp)}</span>
-                </div>
+                <>
+                    <div className="flex items-center"> {/* New wrapper */}
+                        {/* Edit Button - placed here for user messages (left of bubble) */}
+                        {msg.sender === 'user' && !currentConversation?.isCharToCharConversation && !isSending && (
+                            <button
+                                onClick={() => handleEditMessage(msg.id, msg.text)}
+                                className={`p-1 rounded-full mr-1.5 ${isDarkMode ? 'text-slate-400 hover:text-slate-200 hover:bg-slate-700' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-300'} transition-colors`}
+                                title="編集"
+                            >
+                                <FaEdit size={12} />
+                            </button>
+                        )}
+                        {/* Message Bubble Div */}
+                        <div className={`relative rounded-xl px-3.5 py-2.5 shadow-md break-words min-w-[70px] ${bubbleClass}`}
+                          style={ characterForMessage && !messageSenderIsUser && msg.emotion && EMOTION_COLORS[msg.emotion as keyof typeof EMOTION_COLORS] && !lineThemeActive && !currentConversation?.isCharToCharConversation ? { borderLeft: justifyContentClass === 'justify-start' ? `4px solid ${EMOTION_COLORS[msg.emotion as keyof typeof EMOTION_COLORS]}` : '', borderRight: justifyContentClass === 'justify-end' ? `4px solid ${EMOTION_COLORS[msg.emotion as keyof typeof EMOTION_COLORS]}`:'' } : {} } >
+                          {msg.imageUrl && ( <img src={msg.imageUrl} alt="送信された画像" className="max-w-full max-h-60 rounded-lg mb-2 cursor-pointer shadow-sm" onClick={() => window.open(msg.imageUrl, '_blank')} /> )}
+                          {msg.text && <span className={`whitespace-pre-wrap ${messageTextColorClass}`}>{msg.text}</span>}
+                          {!msg.text && msg.imageUrl && <span className={`${messageTextColorClass} italic text-sm`}>画像</span>}
+                        </div>
+                    </div>
+
+                    {/* Timestamp and Read Status Div (remains below) */}
+                    <div className={`text-xs mt-0.5 flex items-center ${justifyContentClass === 'justify-end' ? 'pr-1' : 'pl-1'} ${timeAndReadStatusColor}`}>
+                        {msg.sender === 'user' && ( <span className={`mr-1.5 ${msg.isRead ? timeAndReadStatusColor : 'text-transparent'}`}> {msg.isRead ? '既読' : '送信済'} </span> )}
+                        <span>{formatTime(msg.timestamp)}</span>
+                    </div>
+                </>
             )}
           </div>
-          {msg.sender === 'user' && !currentConversation?.isCharToCharConversation && !isCurrentlyEditingThisMessage && !isSending && (
-            <button
-                onClick={() => handleEditMessage(msg.id, msg.text)}
-                className={`absolute top-0 ${justifyContentClass === 'justify-end' ? 'left-0 -translate-x-full ml-1' : 'right-0 translate-x-full mr-1'} p-1 rounded-full opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity
-                            ${isDarkMode ? 'text-slate-400 hover:text-slate-200 hover:bg-slate-700' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200'}`}
-                title="編集"
-            >
-                <FaEdit size={12} />
-            </button>
-          )}
         </div>
       </div>
     )
-  }), [isDarkMode, lineThemeActive, effectiveTextColor, characters, currentConversation, showEmotionIcons, generalTextColor, timeAndReadStatusColor, isLineDark, editingMessageId, editingMessageText, handleCancelEditMessage, handleSaveEditMessage, handleEditMessage, currentCharacterForNormalChat, isSending, generalInputFieldBgColor, generalBorderColor]);
+  }), [isDarkMode, lineThemeActive, effectiveTextColor, characters, currentConversation, showEmotionIcons, generalTextColor, timeAndReadStatusColor, isLineDark, editingMessageId, currentCharacterForNormalChat, isSending, generalInputFieldBgColor, generalBorderColor]);
 
   const getModeIcon = useCallback((mode?: 'auto' | 'battle' | 'debate') => {
     if (mode === 'battle') return <FaFistRaised className="mr-2" />;
