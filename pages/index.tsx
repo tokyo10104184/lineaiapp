@@ -499,14 +499,19 @@ export default function Home() {
                 if (conv.id === currentConversationId) {
                     const messageIndex = conv.messages.findIndex(msg => msg.id === editedMessageId);
                     if (messageIndex === -1) return conv;
-                    const updatedMessages = conv.messages.slice(0, messageIndex + 1); // Keep history up to this point
-                    updatedMessages[messageIndex] = {
-                        ...updatedMessages[messageIndex],
-                        text: textToSend,
-                        isEditing: false,
-                        timestamp: new Date(),
-                        imageUrl: localImageDataUrl, // Add image if it was part of edit
-                    };
+                    const updatedMessages = conv.messages.map((msg, index) => {
+                      if (index === messageIndex) {
+                        return {
+                          ...msg,
+                          text: textToSend,
+                          isEditing: false,
+                          originalText: undefined, // Clear original text after successful edit
+                          timestamp: new Date(),
+                          imageUrl: localImageDataUrl,
+                        };
+                      }
+                      return msg;
+                    });
                     return { ...conv, messages: updatedMessages };
                 }
                 return conv;
@@ -1804,3 +1809,4 @@ export default function Home() {
     </div>
   )
 }
+
