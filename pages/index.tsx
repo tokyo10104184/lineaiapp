@@ -1323,23 +1323,24 @@ export default function Home() {
                 <div className={`text-xs mt-0.5 flex items-center ${justifyContentClass === 'justify-end' ? 'pr-1' : 'pl-1'} ${timeAndReadStatusColor}`}>
                 {msg.sender === 'user' && ( <span className={`mr-1.5 ${msg.isRead ? timeAndReadStatusColor : 'text-transparent'}`}> {msg.isRead ? '既読' : '送信済'} </span> )}
                 <span>{formatTime(msg.timestamp)}</span>
+                {/* NEW BUTTON LOCATION STARTS HERE */}
+                {msg.sender === 'user' && !currentConversation?.isCharToCharConversation && !isSending && (
+                    <button
+                        onClick={() => handleEditMessage(msg.id, msg.text)}
+                        className={`p-1 rounded-full ml-2 ${isDarkMode ? 'text-slate-400 hover:text-slate-200 hover:bg-slate-700' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-300'} transition-colors`}
+                        title="編集"
+                    >
+                        <FaEdit size={12} />
+                    </button>
+                )}
+                {/* NEW BUTTON LOCATION ENDS HERE */}
                 </div>
             )}
           </div>
-          {msg.sender === 'user' && !currentConversation?.isCharToCharConversation && !isCurrentlyEditingThisMessage && !isSending && (
-            <button
-                onClick={() => handleEditMessage(msg.id, msg.text)}
-                className={`absolute top-0 ${justifyContentClass === 'justify-end' ? 'left-0 -translate-x-full ml-1' : 'right-0 translate-x-full mr-1'} p-1 rounded-full opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity
-                            ${isDarkMode ? 'text-slate-400 hover:text-slate-200 hover:bg-slate-700' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200'}`}
-                title="編集"
-            >
-                <FaEdit size={12} />
-            </button>
-          )}
         </div>
       </div>
     )
-  }), [isDarkMode, lineThemeActive, effectiveTextColor, characters, currentConversation, showEmotionIcons, generalTextColor, timeAndReadStatusColor, isLineDark, editingMessageId, editingMessageText, handleCancelEditMessage, handleSaveEditMessage, handleEditMessage, currentCharacterForNormalChat, isSending, generalInputFieldBgColor, generalBorderColor]);
+  }), [isDarkMode, lineThemeActive, effectiveTextColor, characters, currentConversation, showEmotionIcons, generalTextColor, timeAndReadStatusColor, isLineDark, editingMessageId, handleCancelEditMessage, handleSaveEditMessage, handleEditMessage, currentCharacterForNormalChat, isSending, generalInputFieldBgColor, generalBorderColor]);
 
   const getModeIcon = useCallback((mode?: 'auto' | 'battle' | 'debate') => {
     if (mode === 'battle') return <FaFistRaised className="mr-2" />;
@@ -1809,4 +1810,3 @@ export default function Home() {
     </div>
   )
 }
-
