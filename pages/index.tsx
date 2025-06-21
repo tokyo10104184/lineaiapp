@@ -1298,6 +1298,18 @@ export default function Home() {
                     <textarea
                         value={editingMessageText}
                         onChange={(e) => setEditingMessageText(e.target.value)}
+                        onKeyDown={(e) => {
+                          console.log('[Textarea onKeyDown] Key:', e.key, 'KeyCode:', e.keyCode, 'DefaultPrevented:', e.defaultPrevented);
+                          if (e.key === 'Backspace' || e.key === 'Delete') {
+                            console.log('[Textarea onKeyDown] Deletion key pressed:', e.key, 'DefaultPrevented:', e.defaultPrevented);
+                          }
+                        }}
+                        onFocus={() => {
+                          console.log('[Textarea onFocus] Textarea focused.');
+                        }}
+                        onBlur={() => {
+                          console.log('[Textarea onBlur] Textarea blurred.');
+                        }}
                         className={`w-full p-2 border rounded-md text-sm ${generalInputFieldBgColor} ${generalTextColor} ${generalBorderColor} focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 resize-none`}
                         rows={3}
                         autoFocus
