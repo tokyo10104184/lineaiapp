@@ -7,6 +7,7 @@ import {
 } from 'react-icons/fa';
 import ConfirmationDialog from '../components/ui/ConfirmationDialog'; // Added import
 import GroupChatCreationModal from '../components/GroupChatCreationModal';
+import { FORMATTING_INSTRUCTIONS_PROMPT } from '../lib/prompts';
 
 // --- Interfaces ---
 interface Message {
@@ -154,6 +155,7 @@ export default function Home() {
   const [showTemperatureHelp, setShowTemperatureHelp] = useState(false);
   const [imageToSend, setImageToSend] = useState<{ file: File; url: string } | null>(null);
   const [displayedQuote, setDisplayedQuote] = useState<{ quote: string; author: string } | null>(null);
+  const [chatFontSize, setChatFontSize] = useState('text-sm'); // Added state for chat font size
 
   const [showCharToCharSelectModal, setShowCharToCharSelectModal] = useState(false);
   const [charToCharCandidates, setCharToCharCandidates] = useState<[string | null, string | null]>([null, null]);
@@ -192,7 +194,7 @@ export default function Home() {
     if (name && description) {
         basePrompt = `あなたは「${name}」という名前で、${description}なAIです。\n${basePrompt}`;
         basePrompt += `\n    4. 返答の最後に現在の感情を以下の形式で含めてください：[感情:喜び] （怒り、悲しみ、喜び、驚き、恐れ、愛、平静のいずれか）`;
-        basePrompt += `\n    5. あなたは返答の文字を装飾できます。S[テキスト]S で小さく、L[テキスト]L で大きく、O(0.1～0.9)[テキスト]O で薄く（0.1が最も薄い）、C(色名または#16進数)[テキスト]C で色付けできます（例: C(red)[重要]C や C(#FF0000)[すごい]C）。**テキスト** で太字にもできます。これらの装飾は入れ子にできます（例: L[C(blue)[**フォーカス！**]C]L）。`;
+        // FORMATTING_INSTRUCTIONS_PROMPT is now removed from here and will be added globally
     }
     return basePrompt;
   }, []);
@@ -231,8 +233,10 @@ export default function Home() {
         setShowEmotionIcons(data.showEmotionIcons === undefined ? true : data.showEmotionIcons);
         setDisplayedQuote(data.displayedQuote || null);
         setIsAutoReplying(data.isAutoReplying || false);
+        setChatFontSize(data.chatFontSize || 'text-sm'); // Load chat font size
       } else {
         setBackgroundColor(Object.keys(LIGHT_MODE_CHAT_BACKGROUNDS)[0]);
+        setChatFontSize('text-sm'); // Default if no saved data
       }
     } catch (error) {
       console.error("Failed to load or parse data from localStorage:", error);
@@ -267,11 +271,12 @@ export default function Home() {
         const data = {
           conversations, characters, currentConversationId, currentCharacterId,
           backgroundColor, isDarkMode, useCensorship,
-          lineThemeActive, showEmotionIcons, displayedQuote, isAutoReplying
+          lineThemeActive, showEmotionIcons, displayedQuote, isAutoReplying,
+          chatFontSize // Save chat font size
         };
         localStorage.setItem('chatAppData', JSON.stringify(data));
     }
-  }, [conversations, characters, currentConversationId, currentCharacterId, backgroundColor, isDarkMode, useCensorship, lineThemeActive, showEmotionIcons, displayedQuote, isAutoReplying]);
+  }, [conversations, characters, currentConversationId, currentCharacterId, backgroundColor, isDarkMode, useCensorship, lineThemeActive, showEmotionIcons, displayedQuote, isAutoReplying, chatFontSize]);
 
   useEffect(() => {
     const sidebarElement = sidebarRef.current;
@@ -585,7 +590,11 @@ export default function Home() {
                     };
                 });
 
-                const messagesPayload = [{ role: 'system', content: character.systemPrompt }, ...historyForApi];
+                const messagesPayload = [
+                  { role: 'system', content: FORMATTING_INSTRUCTIONS_PROMPT },
+                  { role: 'system', content: character.systemPrompt },
+                  ...historyForApi
+                ];
                 const apiRequestBody: ChutesApiRequestBody = { model, messages: messagesPayload, temperature, useCensorship };
 
                 if (localImageDataUrl && currentModelSupportsImage) { // User's image sent to all AIs
@@ -663,7 +672,11 @@ export default function Home() {
                 };
             });
 
-            const messagesPayload = [{ role: 'system', content: currentCharacterForNormalChat.systemPrompt }, ...historyForApi];
+            const messagesPayload = [
+              { role: 'system', content: FORMATTING_INSTRUCTIONS_PROMPT },
+              { role: 'system', content: currentCharacterForNormalChat.systemPrompt },
+              ...historyForApi
+            ];
             const apiRequestBody: ChutesApiRequestBody = { model, messages: messagesPayload, temperature, useCensorship };
             if (isImageMessage && localImageDataUrl && currentModelSupportsImage && !editedMessageId) {
                 apiRequestBody.imageDataUrl = localImageDataUrl;
@@ -784,12 +797,20 @@ export default function Home() {
 
   const generateApiMessagesForCharToChar = useCallback((
     conversationMessages: Message[],
-    effectiveSystemPrompt: string,
+    characterSystemPrompt: string,
+    modeSpecificInstructions: string,
     participantIds: [string, string],
     speakerCharacterId: string,
     opponentLastMessageText?: string
   ): Array<{role: string, content: string}> => {
-    const apiMessages: Array<{role: string, content: string}> = [{ role: 'system', content: effectiveSystemPrompt }];
+    const systemPromptsInitial: Array<{role: string, content: string}> = [
+      { role: 'system', content: FORMATTING_INSTRUCTIONS_PROMPT },
+      { role: 'system', content: characterSystemPrompt }
+    ];
+    if (modeSpecificInstructions && modeSpecificInstructions.trim() !== '') {
+      systemPromptsInitial.push({ role: 'system', content: modeSpecificInstructions });
+    }
+    const apiMessages: Array<{role: string, content: string}> = [...systemPromptsInitial];
 
     const history = conversationMessages
       .filter(m => m.sender !== 'system' && participantIds.includes(m.sender))
@@ -851,10 +872,15 @@ export default function Home() {
             modeSpecificInstructions = `\n\n追加指示：あなたは今、「${opponentName}」と自由な会話をしています。特定の役割に縛られず、自然体で会話を続けてください。これはカジュアルな自動会話です。`;
         }
 
-        const effectiveSystemPrompt = `${baseSystemPrompt}${modeSpecificInstructions}`;
+        // const effectiveSystemPrompt = `${baseSystemPrompt}${modeSpecificInstructions}`; // Old way
 
         const apiPayloadMessages = generateApiMessagesForCharToChar(
-          conversationToUpdate.messages, effectiveSystemPrompt, participantIds, speakerCharId, promptTextForSpeaker
+          conversationToUpdate.messages,
+          baseSystemPrompt, // Pass pure character prompt
+          modeSpecificInstructions, // Pass mode instructions separately
+          participantIds,
+          speakerCharId,
+          promptTextForSpeaker
         );
         const apiRequestBody: ChutesApiRequestBody = {
           model: speakerModel, messages: apiPayloadMessages, temperature, useCensorship
@@ -1228,7 +1254,8 @@ export default function Home() {
   const renderFormattedText = (text: string | undefined): React.ReactNode => {
     if (!text) return null;
 
-    const regex = /(\*\*[\s\S]*?\*\*|S\[[\s\S]*?\]S|L\[[\s\S]*?\]L|O\([0-9.]+\)\[[\s\S]*?\]O|C\(.+?\)\[[\s\S]*?\]C)/g;
+    // Order matters for regex: check ** first, then *
+    const regex = /(\*\*[\s\S]*?\*\*|\*[\s\S]*?\*|S\[[\s\S]*?\]S|L\[[\s\S]*?\]L|O\([0-9.]+\)\[[\s\S]*?\]O|C\(.+?\)\[[\s\S]*?\]C)/g;
     const parts = text.split(regex);
 
     return parts.map((part, index) => {
@@ -1238,15 +1265,25 @@ export default function Home() {
       if (part.startsWith('**') && part.endsWith('**')) {
         if (part.length > 4) { // Valid bold **text**
           return <strong key={index}>{renderFormattedText(part.substring(2, part.length - 2))}</strong>;
-        } else if (part === '****') { // Treat **** as empty bold or perhaps literal asterisks
-          return <strong key={index}></strong>; // Renders as bold, but empty. Or return "****" for literal.
+        } else if (part === '****') {
+          return <strong key={index}></strong>;
         }
-        // If it's just "**" or "***", treat as literal
+        // Malformed like "**" or "***", or if it's content of italic like *text**
+        return part;
+      }
+
+      // Italic: *text*
+      // This is checked AFTER bold to correctly handle ***text*** as <strong><em>text</em></strong>
+      else if (part.startsWith('*') && part.endsWith('*')) {
+        if (part.length > 2) { // Valid italic *t*
+          return <em key={index}>{renderFormattedText(part.substring(1, part.length - 1))}</em>;
+        }
+        // Malformed like "*" or if it's part of bold like **text*
         return part;
       }
 
       // Small: S[text]S
-      if (part.startsWith('S[') && part.endsWith(']S') && part.length >= 4) { // S[]S is length 4
+      else if (part.startsWith('S[') && part.endsWith(']S') && part.length >= 4) { // S[]S is length 4
         const content = part.substring(2, part.length - 2);
         return <span key={index} style={{ fontSize: '0.8em' }}>{renderFormattedText(content)}</span>;
       }
@@ -1288,7 +1325,7 @@ export default function Home() {
     });
   };
 
-  const MessageItem = useMemo(() => React.memo(({ msg }: { msg: Message }) => {
+  const MessageItem = useMemo(() => React.memo(({ msg, currentChatFontSize }: { msg: Message; currentChatFontSize: string }) => {
     if (msg.sender === 'system') {
         return (
             <div className="text-center my-2">
@@ -1340,7 +1377,7 @@ export default function Home() {
 
     return (
       <div className={`flex ${justifyContentClass} mb-1.5 px-2 group relative`}>
-        <div className={`max-w-[80%] sm:max-w-[75%] flex ${justifyContentClass === 'justify-end' ? 'flex-row-reverse' : 'flex-row'}`}>
+        <div className={`max-w-[90%] sm:max-w-[85%] flex ${justifyContentClass === 'justify-end' ? 'flex-row-reverse' : 'flex-row'}`}>
           <div className={`flex-shrink-0 self-start mt-1 ${justifyContentClass === 'justify-end' ? 'ml-2' : 'mr-2'}`}>
             {characterForMessage && !messageSenderIsUser ? (
               <div className="text-3xl w-9 h-9 rounded-full flex items-center justify-center shadow-sm" style={{ backgroundColor: characterForMessage?.color || '#A0AEC0' }}> {characterForMessage?.icon || '👤'} </div>
@@ -1379,7 +1416,7 @@ export default function Home() {
                 <div className={`relative rounded-xl px-3.5 py-2.5 shadow-md break-words min-w-[70px] ${bubbleClass}`}
                   style={ characterForMessage && !messageSenderIsUser && msg.emotion && EMOTION_COLORS[msg.emotion as keyof typeof EMOTION_COLORS] && !lineThemeActive && !currentConversation?.isCharToCharConversation ? { borderLeft: justifyContentClass === 'justify-start' ? `4px solid ${EMOTION_COLORS[msg.emotion as keyof typeof EMOTION_COLORS]}` : '', borderRight: justifyContentClass === 'justify-end' ? `4px solid ${EMOTION_COLORS[msg.emotion as keyof typeof EMOTION_COLORS]}`:'' } : {} } >
                   {msg.imageUrl && ( <img src={msg.imageUrl} alt="送信された画像" className="max-w-full max-h-60 rounded-lg mb-2 cursor-pointer shadow-sm" onClick={() => window.open(msg.imageUrl, '_blank')} /> )}
-                  {msg.text && <span className={`whitespace-pre-wrap ${messageTextColorClass} text-sm`}>{renderFormattedText(msg.text)}</span>}
+                  {msg.text && <span className={`whitespace-pre-wrap ${messageTextColorClass} ${currentChatFontSize}`}>{renderFormattedText(msg.text)}</span>}
                   {!msg.text && msg.imageUrl && <span className={`${messageTextColorClass} italic text-xs`}>画像</span>}
                 </div>
             )}
@@ -1576,6 +1613,21 @@ export default function Home() {
               <label className={`text-sm font-medium ${sidebarActualTextColor}`}>LINE風テーマ</label>
               <button onClick={() => setLineThemeActive(!lineThemeActive)} className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all duration-150 shadow-sm ${lineThemeActive ? 'bg-green-500 hover:bg-green-600 text-white' : `${isDarkMode ? 'bg-slate-600 hover:bg-slate-500' : 'bg-slate-200 hover:bg-slate-300'} ${sidebarActualTextColor}`}`}> {lineThemeActive ? 'オン' : 'オフ'} </button>
             </div>
+
+            <div>
+              <label className={`block text-sm font-medium mb-1.5 ${sidebarActualTextColor}`}>チャットフォントサイズ</label>
+              <select
+                className={`w-full px-3 py-2.5 border rounded-lg text-sm shadow-sm ${generalInputFieldBgColor} ${sidebarActualTextColor} ${sidebarActualBorderColor} focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors`}
+                value={chatFontSize}
+                onChange={(e) => setChatFontSize(e.target.value)}
+              >
+                <option value="text-xs">極小</option>
+                <option value="text-sm">小</option>
+                <option value="text-base">標準</option>
+                <option value="text-lg">大</option>
+              </select>
+            </div>
+
             <div className={`pt-2 border-t ${generalBorderColor} mt-3`}>
                 <button onClick={showRandomQuote} className={`w-full flex items-center justify-center px-4 py-2.5 rounded-lg transition-colors duration-150 ${generalTextColor} ${isDarkMode ? 'bg-slate-700 hover:bg-slate-600 active:bg-slate-500' : 'bg-slate-100 hover:bg-slate-200 active:bg-slate-300'} font-medium shadow-sm`}> <FaQuoteLeft className="mr-2" /> 今日の名言 </button>
                 {displayedQuote && (
@@ -1635,7 +1687,7 @@ export default function Home() {
             )}
           </div>
           <div ref={chatMessagesContainerRef} className="flex-1 overflow-y-auto p-4 space-y-1 scroll-smooth custom-scrollbar" style={{ backgroundColor: chatMessagesListActualBg }}>
-            {currentConversation && currentConversation.messages.map((msg) => ( <MessageItem key={msg.id} msg={msg} /> ))}
+            {currentConversation && currentConversation.messages.map((msg) => ( <MessageItem key={msg.id} msg={msg} currentChatFontSize={chatFontSize} /> ))}
             <div ref={messagesEndRef} />
             {!currentConversation && ( <div className={`text-center ${effectiveTextColor} opacity-50 mt-16 flex flex-col items-center`}> <FaRobot size={60} className="mx-auto mb-6 opacity-70"/> <p className="text-lg">会話を開始するか、既存の会話を選択してください。</p> </div> )}
           </div>
