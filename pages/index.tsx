@@ -192,6 +192,7 @@ export default function Home() {
     if (name && description) {
         basePrompt = `あなたは「${name}」という名前で、${description}なAIです。\n${basePrompt}`;
         basePrompt += `\n    4. 返答の最後に現在の感情を以下の形式で含めてください：[感情:喜び] （怒り、悲しみ、喜び、驚き、恐れ、愛、平静のいずれか）`;
+        basePrompt += `\n    5. あなたは返答の文字を装飾できます。S[テキスト]S で小さく、L[テキスト]L で大きく、O(0.1～0.9)[テキスト]O で薄く（0.1が最も薄い）、C(色名または#16進数)[テキスト]C で色付けできます（例: C(red)[重要]C や C(#FF0000)[すごい]C）。**テキスト** で太字にもできます。これらの装飾は入れ子にできます（例: L[C(blue)[**フォーカス！**]C]L）。`;
     }
     return basePrompt;
   }, []);
@@ -1224,20 +1225,66 @@ export default function Home() {
     sendMessage(editingMessageText, editingMessageId);
   }, [editingMessageId, editingMessageText, sendMessage, handleCancelEditMessage]);
 
-  const renderFormattedText = (text: string | undefined) => {
+  const renderFormattedText = (text: string | undefined): React.ReactNode => {
     if (!text) return null;
-    // Using a more robust regex to handle cases like ** at the start/end of line or multiple bolds
-    const parts = text.split(/(\*\*.*?\*\*)/g);
+
+    const regex = /(\*\*[\s\S]*?\*\*|S\[[\s\S]*?\]S|L\[[\s\S]*?\]L|O\([0-9.]+\)\[[\s\S]*?\]O|C\(.+?\)\[[\s\S]*?\]C)/g;
+    const parts = text.split(regex);
+
     return parts.map((part, index) => {
+      if (!part) return null;
+
+      // Bold: **text**
       if (part.startsWith('**') && part.endsWith('**')) {
-        // Ensure it's not just **** or something unintended
-        if (part.length > 4) {
-          return <strong key={index}>{part.substring(2, part.length - 2)}</strong>;
-        } else if (part === '****') { // Treat **** as two literal asterisks pairs, or adjust as needed
-          return <strong key={index}></strong>; // Or return "****" if it should not be strong
+        if (part.length > 4) { // Valid bold **text**
+          return <strong key={index}>{renderFormattedText(part.substring(2, part.length - 2))}</strong>;
+        } else if (part === '****') { // Treat **** as empty bold or perhaps literal asterisks
+          return <strong key={index}></strong>; // Renders as bold, but empty. Or return "****" for literal.
         }
+        // If it's just "**" or "***", treat as literal
+        return part;
       }
-      return part;
+
+      // Small: S[text]S
+      if (part.startsWith('S[') && part.endsWith(']S') && part.length >= 4) { // S[]S is length 4
+        const content = part.substring(2, part.length - 2);
+        return <span key={index} style={{ fontSize: '0.8em' }}>{renderFormattedText(content)}</span>;
+      }
+
+      // Large: L[text]L
+      if (part.startsWith('L[') && part.endsWith(']L') && part.length >= 4) { // L[]L is length 4
+        const content = part.substring(2, part.length - 2);
+        return <span key={index} style={{ fontSize: '1.2em' }}>{renderFormattedText(content)}</span>;
+      }
+
+      // Opacity: O(value)[text]O
+      const opacityMatch = part.match(/^O\(([0-9.]+)\)\[([\s\S]*)\]O$/);
+      if (opacityMatch) {
+        const value = parseFloat(opacityMatch[1]);
+        const content = opacityMatch[2];
+        if (value >= 0.1 && value <= 1.0) { // Allow up to 1.0 for full opacity
+          return <span key={index} style={{ opacity: value }}>{renderFormattedText(content)}</span>;
+        }
+        // If value is invalid, parse content without opacity
+        return renderFormattedText(content);
+      }
+
+      // Color: C(colorValue)[text]C
+      const colorMatch = part.match(/^C\((.+?)\)\[([\s\S]*)\]C$/);
+      if (colorMatch) {
+        const colorValue = colorMatch[1];
+        const content = colorMatch[2];
+        // Basic validation for colorValue to prevent obvious XSS if AI generates malicious values.
+        // A more robust sanitization might be needed if complex CSS is allowed.
+        // For now, assuming color names, hex, rgb, rgba, hsl, hsla.
+        if (/^[#\w\s(),%.-]+$/.test(colorValue)) {
+           return <span key={index} style={{ color: colorValue }}>{renderFormattedText(content)}</span>;
+        }
+        // If colorValue is invalid, parse content without color
+        return renderFormattedText(content);
+      }
+
+      return part; // Regular text
     });
   };
 
