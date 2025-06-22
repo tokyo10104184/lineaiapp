@@ -69,9 +69,10 @@ const RANDOM_QUOTES = [
 const MODEL_OPTIONS = {
     'Deepseek V3 0324': { value: 'deepseek-ai/DeepSeek-V3-0324', description: '高性能・長文・高速の万能モデル (画像対応)', supportsImage: true },
     'Deepseek R1 0528': { value: 'deepseek-ai/DeepSeek-R1-0528', description: '深い推論力を備えたモデル', supportsImage: false },
-    'Qwen3 235B A22B': { value: 'Qwen/Qwen3-235B-A22B', description: '推論力に長けた高速モデル', supportsImage: false },
-    'Llama 4 Scout': { value: 'chutesai/Llama-4-Scout-17B-16E-Instruct', description: 'バランス型のMeta製モデル', supportsImage: false },
-    'Mistral Small 3.1': { value: 'chutesai/Mistral-Small-3.1-24B-Instruct-2503', description: '軽量・高速な省リソースモデル', supportsImage: false }
+    'GLM 4 0414': { value: 'THUDM/GLM-4-32B-0414', description: 'GLM-4 32Bモデル (0414バージョン)', supportsImage: false }, // Added
+    'Mistral Small 3.2': { value: 'chutesai/Mistral-Small-3.2-24B-Instruct-2506', description: '軽量・高速な省リソースモデル (3.2)', supportsImage: false }, // Added
+    'Qwen3 32B': { value: 'Qwen/Qwen3-32B', description: '推論力に長けたQwen3 32Bモデル', supportsImage: false }, // Added
+    'Llama 4 Scout': { value: 'chutesai/Llama-4-Scout-17B-16E-Instruct', description: 'バランス型のMeta製モデル', supportsImage: false } // Verified
 };
 const LIGHT_MODE_CHAT_BACKGROUNDS = {
     'ペールグレー': '#f8fafc', 'ホワイト': '#ffffff', 'スカイブルー': '#e0f2fe',
