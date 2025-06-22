@@ -194,7 +194,7 @@ export default function Home() {
     if (name && description) {
         basePrompt = `あなたは「${name}」という名前で、${description}なAIです。\n${basePrompt}`;
         basePrompt += `\n    4. 返答の最後に現在の感情を以下の形式で含めてください：[感情:喜び] （怒り、悲しみ、喜び、驚き、恐れ、愛、平静のいずれか）`;
-        basePrompt += `\n${FORMATTING_INSTRUCTIONS_PROMPT}`; // Use imported prompt
+        // FORMATTING_INSTRUCTIONS_PROMPT is now removed from here and will be added globally
     }
     return basePrompt;
   }, []);
@@ -590,7 +590,11 @@ export default function Home() {
                     };
                 });
 
-                const messagesPayload = [{ role: 'system', content: character.systemPrompt }, ...historyForApi];
+                const messagesPayload = [
+                  { role: 'system', content: FORMATTING_INSTRUCTIONS_PROMPT },
+                  { role: 'system', content: character.systemPrompt },
+                  ...historyForApi
+                ];
                 const apiRequestBody: ChutesApiRequestBody = { model, messages: messagesPayload, temperature, useCensorship };
 
                 if (localImageDataUrl && currentModelSupportsImage) { // User's image sent to all AIs
@@ -668,7 +672,11 @@ export default function Home() {
                 };
             });
 
-            const messagesPayload = [{ role: 'system', content: currentCharacterForNormalChat.systemPrompt }, ...historyForApi];
+            const messagesPayload = [
+              { role: 'system', content: FORMATTING_INSTRUCTIONS_PROMPT },
+              { role: 'system', content: currentCharacterForNormalChat.systemPrompt },
+              ...historyForApi
+            ];
             const apiRequestBody: ChutesApiRequestBody = { model, messages: messagesPayload, temperature, useCensorship };
             if (isImageMessage && localImageDataUrl && currentModelSupportsImage && !editedMessageId) {
                 apiRequestBody.imageDataUrl = localImageDataUrl;
@@ -789,12 +797,20 @@ export default function Home() {
 
   const generateApiMessagesForCharToChar = useCallback((
     conversationMessages: Message[],
-    effectiveSystemPrompt: string,
+    characterSystemPrompt: string,
+    modeSpecificInstructions: string,
     participantIds: [string, string],
     speakerCharacterId: string,
     opponentLastMessageText?: string
   ): Array<{role: string, content: string}> => {
-    const apiMessages: Array<{role: string, content: string}> = [{ role: 'system', content: effectiveSystemPrompt }];
+    const systemPromptsInitial: Array<{role: string, content: string}> = [
+      { role: 'system', content: FORMATTING_INSTRUCTIONS_PROMPT },
+      { role: 'system', content: characterSystemPrompt }
+    ];
+    if (modeSpecificInstructions && modeSpecificInstructions.trim() !== '') {
+      systemPromptsInitial.push({ role: 'system', content: modeSpecificInstructions });
+    }
+    const apiMessages: Array<{role: string, content: string}> = [...systemPromptsInitial];
 
     const history = conversationMessages
       .filter(m => m.sender !== 'system' && participantIds.includes(m.sender))
@@ -856,10 +872,15 @@ export default function Home() {
             modeSpecificInstructions = `\n\n追加指示：あなたは今、「${opponentName}」と自由な会話をしています。特定の役割に縛られず、自然体で会話を続けてください。これはカジュアルな自動会話です。`;
         }
 
-        const effectiveSystemPrompt = `${baseSystemPrompt}${modeSpecificInstructions}`;
+        // const effectiveSystemPrompt = `${baseSystemPrompt}${modeSpecificInstructions}`; // Old way
 
         const apiPayloadMessages = generateApiMessagesForCharToChar(
-          conversationToUpdate.messages, effectiveSystemPrompt, participantIds, speakerCharId, promptTextForSpeaker
+          conversationToUpdate.messages,
+          baseSystemPrompt, // Pass pure character prompt
+          modeSpecificInstructions, // Pass mode instructions separately
+          participantIds,
+          speakerCharId,
+          promptTextForSpeaker
         );
         const apiRequestBody: ChutesApiRequestBody = {
           model: speakerModel, messages: apiPayloadMessages, temperature, useCensorship
