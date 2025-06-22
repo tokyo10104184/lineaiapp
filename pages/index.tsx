@@ -69,14 +69,15 @@ const RANDOM_QUOTES = [
 const MODEL_OPTIONS = {
     'Deepseek V3 0324': { value: 'deepseek-ai/DeepSeek-V3-0324', description: '高性能・長文・高速の万能モデル (画像対応)', supportsImage: true },
     'Deepseek R1 0528': { value: 'deepseek-ai/DeepSeek-R1-0528', description: '深い推論力を備えたモデル', supportsImage: false },
-    'Qwen3 235B A22B': { value: 'Qwen/Qwen3-235B-A22B', description: '推論力に長けた高速モデル', supportsImage: false },
-    'Llama 4 Scout': { value: 'chutesai/Llama-4-Scout-17B-16E-Instruct', description: 'バランス型のMeta製モデル', supportsImage: false },
-    'Mistral Small 3.1': { value: 'chutesai/Mistral-Small-3.1-24B-Instruct-2503', description: '軽量・高速な省リソースモデル', supportsImage: false }
+    'GLM 4 0414': { value: 'THUDM/GLM-4-32B-0414', description: 'GLM-4 32Bモデル (0414バージョン)', supportsImage: false }, // Added
+    'Mistral Small 3.2': { value: 'chutesai/Mistral-Small-3.2-24B-Instruct-2506', description: '軽量・高速な省リソースモデル (3.2)', supportsImage: false }, // Added
+    'Qwen3 32B': { value: 'Qwen/Qwen3-32B', description: '推論力に長けたQwen3 32Bモデル', supportsImage: false }, // Added
+    'Llama 4 Scout': { value: 'chutesai/Llama-4-Scout-17B-16E-Instruct', description: 'バランス型のMeta製モデル', supportsImage: false } // Verified
 };
 const LIGHT_MODE_CHAT_BACKGROUNDS = {
-    'ペールグレー': '#f8fafc', 'ホワイト': '#ffffff', 'スカイブルー': '#e0f2fe',
+    'ペールグレー': '#f8fafc', 'ホワイト': '#ffffff', 'スカイブルー': '#e0f2fe', // This was the previous implicit color for LINE theme light
     'ミントグリーン': '#d1fae5', 'ベビーピンク': '#fce7f3', 'ライトイエロー': '#fef9c3',
-    'ラベンダー': '#ede9fe', '青空': '#87CEEB',
+    'ラベンダー': '#ede9fe', '青空': '#B0E0F6', // Changed from #87CEEB to a paler version
     'コーラル': '#fff0f5', 'ライム': '#f0fff0',
 };
 const DARK_MODE_CHAT_BACKGROUNDS = {
@@ -1223,6 +1224,22 @@ export default function Home() {
     sendMessage(editingMessageText, editingMessageId);
   }, [editingMessageId, editingMessageText, sendMessage, handleCancelEditMessage]);
 
+  const renderFormattedText = (text: string | undefined) => {
+    if (!text) return null;
+    // Using a more robust regex to handle cases like ** at the start/end of line or multiple bolds
+    const parts = text.split(/(\*\*.*?\*\*)/g);
+    return parts.map((part, index) => {
+      if (part.startsWith('**') && part.endsWith('**')) {
+        // Ensure it's not just **** or something unintended
+        if (part.length > 4) {
+          return <strong key={index}>{part.substring(2, part.length - 2)}</strong>;
+        } else if (part === '****') { // Treat **** as two literal asterisks pairs, or adjust as needed
+          return <strong key={index}></strong>; // Or return "****" if it should not be strong
+        }
+      }
+      return part;
+    });
+  };
 
   const MessageItem = useMemo(() => React.memo(({ msg }: { msg: Message }) => {
     if (msg.sender === 'system') {
@@ -1315,8 +1332,8 @@ export default function Home() {
                 <div className={`relative rounded-xl px-3.5 py-2.5 shadow-md break-words min-w-[70px] ${bubbleClass}`}
                   style={ characterForMessage && !messageSenderIsUser && msg.emotion && EMOTION_COLORS[msg.emotion as keyof typeof EMOTION_COLORS] && !lineThemeActive && !currentConversation?.isCharToCharConversation ? { borderLeft: justifyContentClass === 'justify-start' ? `4px solid ${EMOTION_COLORS[msg.emotion as keyof typeof EMOTION_COLORS]}` : '', borderRight: justifyContentClass === 'justify-end' ? `4px solid ${EMOTION_COLORS[msg.emotion as keyof typeof EMOTION_COLORS]}`:'' } : {} } >
                   {msg.imageUrl && ( <img src={msg.imageUrl} alt="送信された画像" className="max-w-full max-h-60 rounded-lg mb-2 cursor-pointer shadow-sm" onClick={() => window.open(msg.imageUrl, '_blank')} /> )}
-                  {msg.text && <span className={`whitespace-pre-wrap ${messageTextColorClass}`}>{msg.text}</span>}
-                  {!msg.text && msg.imageUrl && <span className={`${messageTextColorClass} italic text-sm`}>画像</span>}
+                  {msg.text && <span className={`whitespace-pre-wrap ${messageTextColorClass} text-sm`}>{renderFormattedText(msg.text)}</span>}
+                  {!msg.text && msg.imageUrl && <span className={`${messageTextColorClass} italic text-xs`}>画像</span>}
                 </div>
             )}
             {!isCurrentlyEditingThisMessage && (
