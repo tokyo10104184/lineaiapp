@@ -192,7 +192,7 @@ export default function Home() {
     if (name && description) {
         basePrompt = `あなたは「${name}」という名前で、${description}なAIです。\n${basePrompt}`;
         basePrompt += `\n    4. 返答の最後に現在の感情を以下の形式で含めてください：[感情:喜び] （怒り、悲しみ、喜び、驚き、恐れ、愛、平静のいずれか）`;
-        basePrompt += `\n    5. あなたは返答の文字を装飾できます。S[テキスト]S で小さく、L[テキスト]L で大きく、O(0.1～0.9)[テキスト]O で薄く（0.1が最も薄い）、C(色名または#16進数)[テキスト]C で色付けできます（例: C(red)[重要]C や C(#FF0000)[すごい]C）。**テキスト** で太字にもできます。これらの装飾は入れ子にできます（例: L[C(blue)[**フォーカス！**]C]L）。`;
+        basePrompt += `\n    5. あなたは返答の文字を装飾できます。S[テキスト]S で小さく、L[テキスト]L で大きく、O(0.1～0.9)[テキスト]O で薄く（0.1が最も薄い）、C(色名または#16進数)[テキスト]C で色付けできます（例: C(red)[重要]C や C(#FF0000)[すごい]C）。また、**テキスト** で太字、*テキスト* で斜体（イタリック）にもできます。これらの装飾は入れ子にできます（例: L[C(blue)[***フォーカス！***]C]L）。`;
     }
     return basePrompt;
   }, []);
@@ -1228,7 +1228,8 @@ export default function Home() {
   const renderFormattedText = (text: string | undefined): React.ReactNode => {
     if (!text) return null;
 
-    const regex = /(\*\*[\s\S]*?\*\*|S\[[\s\S]*?\]S|L\[[\s\S]*?\]L|O\([0-9.]+\)\[[\s\S]*?\]O|C\(.+?\)\[[\s\S]*?\]C)/g;
+    // Order matters for regex: check ** first, then *
+    const regex = /(\*\*[\s\S]*?\*\*|\*[\s\S]*?\*|S\[[\s\S]*?\]S|L\[[\s\S]*?\]L|O\([0-9.]+\)\[[\s\S]*?\]O|C\(.+?\)\[[\s\S]*?\]C)/g;
     const parts = text.split(regex);
 
     return parts.map((part, index) => {
@@ -1238,15 +1239,25 @@ export default function Home() {
       if (part.startsWith('**') && part.endsWith('**')) {
         if (part.length > 4) { // Valid bold **text**
           return <strong key={index}>{renderFormattedText(part.substring(2, part.length - 2))}</strong>;
-        } else if (part === '****') { // Treat **** as empty bold or perhaps literal asterisks
-          return <strong key={index}></strong>; // Renders as bold, but empty. Or return "****" for literal.
+        } else if (part === '****') {
+          return <strong key={index}></strong>;
         }
-        // If it's just "**" or "***", treat as literal
+        // Malformed like "**" or "***", or if it's content of italic like *text**
+        return part;
+      }
+
+      // Italic: *text*
+      // This is checked AFTER bold to correctly handle ***text*** as <strong><em>text</em></strong>
+      else if (part.startsWith('*') && part.endsWith('*')) {
+        if (part.length > 2) { // Valid italic *t*
+          return <em key={index}>{renderFormattedText(part.substring(1, part.length - 1))}</em>;
+        }
+        // Malformed like "*" or if it's part of bold like **text*
         return part;
       }
 
       // Small: S[text]S
-      if (part.startsWith('S[') && part.endsWith(']S') && part.length >= 4) { // S[]S is length 4
+      else if (part.startsWith('S[') && part.endsWith(']S') && part.length >= 4) { // S[]S is length 4
         const content = part.substring(2, part.length - 2);
         return <span key={index} style={{ fontSize: '0.8em' }}>{renderFormattedText(content)}</span>;
       }
