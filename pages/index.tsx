@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import {
     FaUserCircle, FaImage, FaPlus, FaEdit, FaTimes, FaRobot, FaTrash, FaPaperPlane,
     FaBars, FaQuestionCircle, FaPaperclip, FaTimesCircle, FaQuoteLeft, FaComments,
-    FaPlay, FaStop, FaFistRaised, FaBalanceScale, FaCommentDots, FaSave, FaUndo, FaUsers
+    FaPlay, FaStop, FaFistRaised, FaBalanceScale, FaCommentDots, FaSave, FaUndo, FaUsers, FaUpload
 } from 'react-icons/fa';
 import ConfirmationDialog from '../components/ui/ConfirmationDialog'; // Added import
 import GroupChatCreationModal from '../components/GroupChatCreationModal';
@@ -175,6 +175,9 @@ export default function Home() {
   const [characterToDeleteId, setCharacterToDeleteId] = useState<string | null>(null); // Added state
   const [characterDeleteMessage, setCharacterDeleteMessage] = useState(''); // Added state
   const [showGroupChatModal, setShowGroupChatModal] = useState(false);
+  const [showImportCharacterModal, setShowImportCharacterModal] = useState(false);
+  const [characterJsonToImport, setCharacterJsonToImport] = useState('');
+  const [importError, setImportError] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const chatMessagesContainerRef = useRef<HTMLDivElement>(null)
@@ -1251,6 +1254,106 @@ export default function Home() {
     sendMessage(editingMessageText, editingMessageId);
   }, [editingMessageId, editingMessageText, sendMessage, handleCancelEditMessage]);
 
+  const handleExportCharacter = useCallback((e: React.MouseEvent, characterId: string) => {
+    e.stopPropagation();
+    const characterToExport = characters.find(char => char.id === characterId);
+    if (!characterToExport) {
+      alert('エクスポート対象のキャラクターが見つかりません。');
+      return;
+    }
+
+    // Create a deep copy and remove the id for a cleaner export,
+    // as the importer will generate a new ID.
+    // However, for simplicity and potential re-import by same user, keeping ID might be fine.
+    // For now, let's export all fields including ID.
+    const jsonString = JSON.stringify(characterToExport, null, 2);
+    const blob = new Blob([jsonString], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${characterToExport.name || 'character'}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, [characters]);
+
+  const processImportedCharacterData = (data: any): Omit<Character, 'id'> | null => {
+    // Basic validation and data mapping
+    if (typeof data !== 'object' || data === null) return null;
+    if (typeof data.name !== 'string' || !data.name.trim()) return null;
+    // Add more checks for essential fields like systemPrompt, description etc.
+    // For now, we are relatively permissive.
+
+    return {
+      name: data.name,
+      description: data.description || '',
+      systemPrompt: data.systemPrompt || generateSystemPrompt(data.name, data.description || ''),
+      color: typeof data.color === 'string' ? data.color : '#6366f1',
+      activeHours: typeof data.activeHours === 'object' && data.activeHours !== null &&
+                   typeof data.activeHours.start === 'number' && typeof data.activeHours.end === 'number' ?
+                   data.activeHours : { start: 0, end: 23 },
+      useActiveHours: typeof data.useActiveHours === 'boolean' ? data.useActiveHours : false,
+      icon: typeof data.icon === 'string' ? data.icon : '👤',
+      isPublic: typeof data.isPublic === 'boolean' ? data.isPublic : false, // Retain isPublic if present, default false
+    };
+  };
+
+  const handleImportCharacter = useCallback(() => {
+    setImportError(null);
+    if (!characterJsonToImport.trim()) {
+      setImportError('JSONデータが空です。');
+      return;
+    }
+    try {
+      const parsedData = JSON.parse(characterJsonToImport);
+      let charactersToImport: any[] = [];
+
+      if (Array.isArray(parsedData)) { // Handle array of characters
+        charactersToImport = parsedData;
+      } else if (typeof parsedData === 'object' && parsedData !== null) { // Handle single character object
+        charactersToImport = [parsedData];
+      } else {
+        setImportError('無効なJSON形式です。オブジェクトまたはオブジェクトの配列である必要があります。');
+        return;
+      }
+
+      const importedCharacters: Character[] = [];
+      for (const charData of charactersToImport) {
+        const processedData = processImportedCharacterData(charData);
+        if (!processedData) {
+          console.warn("Skipping invalid character data during import:", charData);
+          // Optionally, accumulate errors for specific items
+          continue;
+        }
+        const newCharacter: Character = {
+          id: `char-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`, // Unique ID
+          ...processedData,
+        };
+        importedCharacters.push(newCharacter);
+      }
+
+      if (importedCharacters.length === 0 && charactersToImport.length > 0) {
+        setImportError('有効なキャラクターデータが見つかりませんでした。各キャラクターには少なくとも名前が必要です。');
+        return;
+      }
+      if (importedCharacters.length === 0) {
+         setImportError('インポートする有効なキャラクターが見つかりませんでした。');
+         return;
+      }
+
+      setCharacters(prev => [...prev, ...importedCharacters]);
+      setShowImportCharacterModal(false);
+      setCharacterJsonToImport('');
+      // Optionally, switch to the first imported character or show a success message.
+      alert(`${importedCharacters.length}体のキャラクターが正常にインポートされました。`);
+
+    } catch (error) {
+      console.error("Failed to parse or import character JSON:", error);
+      setImportError('JSONの解析に失敗しました。形式を確認してください。');
+    }
+  }, [characterJsonToImport, characters, generateSystemPrompt]);
+
   const renderFormattedText = (text: string | undefined): React.ReactNode => {
     if (!text) return null;
 
@@ -1543,7 +1646,16 @@ export default function Home() {
           <div className={`p-4 border-b ${sidebarActualBorderColor}`}>
             <div className="flex justify-between items-center mb-3.5">
               <h3 className={`font-semibold text-lg ${sidebarActualTextColor}`}>キャラクター</h3>
-              <button onClick={() => { setEditingCharacter(null); setNewCharacter({ name: '', description: '', systemPrompt: '', color: '#6366f1', activeHours: { start: 0, end: 23 }, useActiveHours: false, icon: '👤', isPublic: false }); setShowCharacterDialog(true); }} className={`p-2 text-white rounded-full transition-all duration-150 bg-green-500 hover:bg-green-600 active:bg-green-700 shadow-md`} title="新しいキャラクター"> <FaPlus size={14} /> </button>
+              <div className="flex space-x-2">
+                <button
+                  onClick={() => { setCharacterJsonToImport(''); setShowImportCharacterModal(true); }}
+                  className={`p-2 text-white rounded-full transition-all duration-150 bg-sky-500 hover:bg-sky-600 active:bg-sky-700 shadow-md`}
+                  title="キャラクターをインポート"
+                >
+                  <FaUpload size={14} />
+                </button>
+                <button onClick={() => { setEditingCharacter(null); setNewCharacter({ name: '', description: '', systemPrompt: '', color: '#6366f1', activeHours: { start: 0, end: 23 }, useActiveHours: false, icon: '👤', isPublic: false }); setShowCharacterDialog(true); }} className={`p-2 text-white rounded-full transition-all duration-150 bg-green-500 hover:bg-green-600 active:bg-green-700 shadow-md`} title="新しいキャラクター"> <FaPlus size={14} /> </button>
+              </div>
             </div>
             <div className="space-y-1.5 max-h-40 md:max-h-52 lg:max-h-40 overflow-y-auto pr-1 custom-scrollbar">
               {characters.map(char => (
@@ -1565,6 +1677,7 @@ export default function Home() {
                         <FaCommentDots size={13} />
                     </button>
                     <button onClick={(e) => { e.stopPropagation(); setEditingCharacter(JSON.parse(JSON.stringify(char))); setShowCharacterDialog(true); }} className={`p-1.5 rounded-full opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity ${isDarkMode ? 'text-slate-400 hover:text-slate-200 hover:bg-slate-600/50' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/70'}`} title="キャラクター編集"> <FaEdit size={13} /> </button>
+                    <button onClick={(e) => handleExportCharacter(e, char.id)} className={`p-1.5 rounded-full opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity ${isDarkMode ? 'text-blue-400 hover:text-blue-300 hover:bg-slate-600/50' : 'text-blue-500 hover:text-blue-700 hover:bg-blue-100/70'}`} title="キャラクターをエクスポート"> <FaShareSquare size={13} /> </button>
                     <button onClick={(e) => deleteCharacterCallback(e, char.id)} className={`p-1.5 rounded-full opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity ${isDarkMode ? 'text-red-400 hover:text-red-300 hover:bg-slate-600/50' : 'text-red-500 hover:text-red-600 hover:bg-red-100/70'}`} title="キャラクター削除"> <FaTrash size={13} /> </button>
                   </div>
                 </div>
@@ -1907,6 +2020,40 @@ export default function Home() {
             onCreateGroup={handleCreateGroupChat}
             isDarkMode={isDarkMode}
         />
+      )}
+
+      {showImportCharacterModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-40 p-4">
+          <div className={`${generalPanelBgColor} ${generalTextColor} p-6 rounded-xl shadow-2xl w-[95vw] sm:max-w-lg max-h-[90vh] flex flex-col`}>
+            <div className="flex justify-between items-center mb-5">
+              <h3 className="text-2xl font-semibold">キャラクターをインポート</h3>
+              <button onClick={() => { setShowImportCharacterModal(false); setImportError(null); }} className={`p-1.5 rounded-full hover:${isDarkMode?'bg-slate-700/70':'bg-slate-200/70'} transition-colors`}><FaTimes size={22} /></button>
+            </div>
+            <div className="flex-1 overflow-y-auto custom-scrollbar pr-2">
+              <p className="text-sm mb-3 opacity-80">
+                エクスポートされたキャラクターのJSONデータを以下に貼り付けてください。
+                単一のキャラクターオブジェクト、またはキャラクターオブジェクトの配列をインポートできます。
+              </p>
+              <textarea
+                value={characterJsonToImport}
+                onChange={(e) => setCharacterJsonToImport(e.target.value)}
+                placeholder='ここにキャラクターのJSONデータを貼り付け...'
+                className={`w-full p-2.5 border rounded-lg shadow-sm ${generalInputFieldBgColor} ${generalTextColor} ${generalBorderColor} focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors min-h-[200px] text-xs font-mono`}
+                rows={10}
+              />
+              {importError && <p className="text-red-500 text-sm mt-2">{importError}</p>}
+            </div>
+            <div className="mt-6 flex justify-end">
+              <button
+                onClick={handleImportCharacter}
+                className={`px-6 py-2.5 bg-sky-600 text-white font-medium rounded-lg hover:bg-sky-700 active:bg-sky-800 transition-colors duration-150 shadow-md disabled:bg-slate-400 disabled:cursor-not-allowed`}
+                disabled={!characterJsonToImport.trim()}
+              >
+                インポート実行
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
        <style jsx global>{`
