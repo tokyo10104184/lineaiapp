@@ -15,7 +15,6 @@ interface Message {
   sender: 'user' | string
   text: string
   timestamp: Date
-  emotion?: string
   isRead?: boolean
   imageUrl?: string
   isEditing?: boolean;
@@ -87,12 +86,12 @@ const DARK_MODE_CHAT_BACKGROUNDS = {
     'アッシュブラウン': '#3f3f46',
     'インディゴナイト': '#283593', 'チャコール': '#36454F',
 };
-const EMOTION_COLORS = {
-    '怒り': '#ef4444', '悲しみ': '#06b6d4', '喜び': '#eab308', '驚き': '#f97316', '平静': '#6b7280'
-};
-const EMOTION_EMOJIS = {
-    '怒り': '😠', '悲しみ': '😢', '喜び': '😊', '驚き': '😲', '平静': '🙂'
-};
+// const EMOTION_COLORS = {
+//     '怒り': '#ef4444', '悲しみ': '#06b6d4', '喜び': '#eab308', '驚き': '#f97316', '平静': '#6b7280'
+// };
+// const EMOTION_EMOJIS = {
+//     '怒り': '😠', '悲しみ': '😢', '喜び': '😊', '驚き': '😲', '平静': '🙂'
+// };
 const QUICK_MESSAGES = [
     { id: '1', text: 'こんにちは！' }, { id: '2', text: 'ありがとう！' }, { id: '3', text: 'いいね' }
 ];
@@ -108,10 +107,10 @@ const formatTime = (date: Date | string): string => {
   }
 };
 
-const extractEmotion = (text: string): string => {
-  const emotionMatch = text.match(/\[感情:(.+?)\]/);
-  return emotionMatch ? emotionMatch[1] : '平静';
-};
+// const extractEmotion = (text: string): string => {
+//   const emotionMatch = text.match(/\[感情:(.+?)\]/);
+//   return emotionMatch ? emotionMatch[1] : '平静';
+// };
 
 const cleanAIReply = (reply: string): string => {
   let cleanedReply = reply;
@@ -151,12 +150,12 @@ export default function Home() {
     activeHours: { start: 0, end: 23 }, useActiveHours: false, icon: '👤', isPublic: false
   });
   const [lineThemeActive, setLineThemeActive] = useState(false);
-  const [showEmotionIcons, setShowEmotionIcons] = useState(true);
+  // const [showEmotionIcons, setShowEmotionIcons] = useState(true); // Removed
   const [showTemperatureHelp, setShowTemperatureHelp] = useState(false);
   const [imageToSend, setImageToSend] = useState<{ file: File; url: string } | null>(null);
   const [displayedQuote, setDisplayedQuote] = useState<{ quote: string; author: string } | null>(null);
   const [chatFontSize, setChatFontSize] = useState('text-sm'); // Added state for chat font size
-  const [applyEmotionColorToText, setApplyEmotionColorToText] = useState(false); // Added state for emotion color application
+  const [allowAICustomTextColor, setAllowAICustomTextColor] = useState(true); // Renamed, default true
 
   const [showCharToCharSelectModal, setShowCharToCharSelectModal] = useState(false);
   const [charToCharCandidates, setCharToCharCandidates] = useState<[string | null, string | null]>([null, null]);
@@ -194,7 +193,7 @@ export default function Home() {
 
     if (name && description) {
         basePrompt = `あなたは「${name}」という名前で、${description}なAIです。\n${basePrompt}`;
-        basePrompt += `\n    4. 返答の最後に現在の感情を以下の形式で含めてください：[感情:喜び] （怒り、悲しみ、喜び、驚き、恐れ、愛、平静のいずれか）`;
+        // basePrompt += `\n    4. 返答の最後に現在の感情を以下の形式で含めてください：[感情:喜び] （怒り、悲しみ、喜び、驚き、恐れ、愛、平静のいずれか）`; // Removed emotion instruction
         // FORMATTING_INSTRUCTIONS_PROMPT is now removed from here and will be added globally
     }
     return basePrompt;
@@ -231,15 +230,15 @@ export default function Home() {
         setIsDarkMode(data.isDarkMode || false);
         setUseCensorship(data.useCensorship || false);
         setLineThemeActive(data.lineThemeActive || false);
-        setShowEmotionIcons(data.showEmotionIcons === undefined ? true : data.showEmotionIcons);
+         // setShowEmotionIcons(data.showEmotionIcons === undefined ? true : data.showEmotionIcons); // Removed
         setDisplayedQuote(data.displayedQuote || null);
         setIsAutoReplying(data.isAutoReplying || false);
         setChatFontSize(data.chatFontSize || 'text-sm'); // Load chat font size
-        setApplyEmotionColorToText(data.applyEmotionColorToText || false); // Load emotion color setting
+        setAllowAICustomTextColor(data.allowAICustomTextColor === undefined ? true : data.allowAICustomTextColor);
       } else {
         setBackgroundColor(Object.keys(LIGHT_MODE_CHAT_BACKGROUNDS)[0]);
         setChatFontSize('text-sm'); // Default if no saved data
-        setApplyEmotionColorToText(false); // Default
+        setAllowAICustomTextColor(true); // Default true
       }
     } catch (error) {
       console.error("Failed to load or parse data from localStorage:", error);
@@ -252,7 +251,7 @@ export default function Home() {
       setIsDarkMode(false);
       setUseCensorship(false);
       setLineThemeActive(false);
-      setShowEmotionIcons(true);
+      // setShowEmotionIcons(true); // Removed
       setDisplayedQuote(null);
       setIsAutoReplying(false);
     }
@@ -274,13 +273,13 @@ export default function Home() {
         const data = {
           conversations, characters, currentConversationId, currentCharacterId,
           backgroundColor, isDarkMode, useCensorship,
-          lineThemeActive, showEmotionIcons, displayedQuote, isAutoReplying,
+           lineThemeActive, displayedQuote, isAutoReplying, // showEmotionIcons removed
           chatFontSize, // Save chat font size
-          applyEmotionColorToText // Save emotion color setting
+           allowAICustomTextColor // Save new setting
         };
         localStorage.setItem('chatAppData', JSON.stringify(data));
     }
-  }, [conversations, characters, currentConversationId, currentCharacterId, backgroundColor, isDarkMode, useCensorship, lineThemeActive, showEmotionIcons, displayedQuote, isAutoReplying, chatFontSize]);
+-  }, [conversations, characters, currentConversationId, currentCharacterId, backgroundColor, isDarkMode, useCensorship, lineThemeActive, displayedQuote, isAutoReplying, chatFontSize, allowAICustomTextColor]);
 
   useEffect(() => {
     const sidebarElement = sidebarRef.current;
@@ -618,12 +617,12 @@ export default function Home() {
                     const data = await response.json();
                     let rawReply = data.reply || 'エラーが発生しました。応答がありません。';
                     let cleanedReply = cleanAIReply(rawReply);
-                    const emotion = extractEmotion(cleanedReply);
-                    const finalReplyText = cleanedReply.replace(/\[感情:.+?\]/, '').trim();
+                    // const emotion = extractEmotion(cleanedReply); // Emotion removed
+                    const finalReplyText = cleanedReply.replace(/\[感情:.+?\]/, '').trim(); // Keep this to remove any residual emotion tags if AI still sends them
 
                     const aiMessage: Message = {
                         id: `${Date.now()}-${aiCharacterId}`, sender: aiCharacterId,
-                        text: finalReplyText, timestamp: new Date(), emotion: emotion, isRead: true // Group messages are immediately "read" by other AIs in context
+                        text: finalReplyText, timestamp: new Date(), isRead: true // Group messages are immediately "read" by other AIs in context
                     };
 
                     setConversations(prev => prev.map(conv =>
@@ -636,7 +635,7 @@ export default function Home() {
                     const errorMessage: Message = {
                         id: `${Date.now()}-error-${aiCharacterId}`, sender: aiCharacterId,
                         text: `${character.name}からの応答生成中にエラーが発生しました。`,
-                        timestamp: new Date(), emotion: '悲しみ'
+                        timestamp: new Date() // Emotion removed
                     };
                     setConversations(prev => prev.map(conv =>
                         conv.id === currentConversationId ? { ...conv, messages: [...conv.messages, errorMessage] } : conv
@@ -695,13 +694,13 @@ export default function Home() {
             const data = await response.json();
             let rawReply = data.reply || 'エラーが発生しました。応答がありません。';
             let cleanedReply = cleanAIReply(rawReply);
-            const emotion = extractEmotion(cleanedReply);
-            const finalReplyText = cleanedReply.replace(/\[感情:.+?\]/, '').trim();
+            // const emotion = extractEmotion(cleanedReply); // Emotion removed
+            const finalReplyText = cleanedReply.replace(/\[感情:.+?\]/, '').trim(); // Keep this to remove any residual emotion tags
 
             const aiMessage: Message = {
                 id: `${Date.now()}-ai`,
                 sender: currentCharacterForNormalChat.id,
-                text: finalReplyText, timestamp: new Date(), emotion: emotion, isRead: false
+                text: finalReplyText, timestamp: new Date(), isRead: false
             };
             setConversations(prev => prev.map(conv =>
                 conv.id === currentConversationId ? { ...conv, messages: [...conv.messages, aiMessage] } : conv
@@ -718,7 +717,7 @@ export default function Home() {
         const errorMessage: Message = {
             id: `${Date.now()}-error-global`, sender: errorSenderId,
             text: errorMessageText,
-            timestamp: new Date(), emotion: '悲しみ'
+            timestamp: new Date() // Emotion removed
         };
         setConversations(prev => {
             const targetConv = prev.find(c => c.id === currentConversationId);
@@ -1309,13 +1308,13 @@ export default function Home() {
       const data = await response.json();
       let rawReply = data.reply || 'エラーが発生しました。応答がありません。';
       let cleanedReply = cleanAIReply(rawReply);
-      const emotion = extractEmotion(cleanedReply);
-      const finalReplyText = cleanedReply.replace(/\[感情:.+?\]/, '').trim();
+      // const emotion = extractEmotion(cleanedReply); // Emotion removed
+      const finalReplyText = cleanedReply.replace(/\[感情:.+?\]/, '').trim(); // Keep this to remove any residual emotion tags
 
       const aiMessage: Message = {
           id: `${Date.now()}-ai-continue`,
           sender: currentCharacterForNormalChat.id,
-          text: finalReplyText, timestamp: new Date(), emotion: emotion, isRead: false
+          text: finalReplyText, timestamp: new Date(), isRead: false
       };
       setConversations(prev => prev.map(conv =>
           conv.id === currentConversationId ? { ...conv, messages: [...conv.messages, aiMessage] } : conv
@@ -1326,7 +1325,7 @@ export default function Home() {
         const errorMessage: Message = {
             id: `${Date.now()}-error-continue`, sender: currentCharacterForNormalChat.id,
             text: '連続応答の生成中にエラーが発生しました。',
-            timestamp: new Date(), emotion: '悲しみ'
+            timestamp: new Date() // Emotion removed
         };
         setConversations(prev => prev.map(conv =>
             conv.id === currentConversationId ? { ...conv, messages: [...conv.messages, errorMessage] } : conv
@@ -1338,7 +1337,7 @@ export default function Home() {
   }, [currentConversation, currentCharacterForNormalChat, isSending, model, temperature, useCensorship, conversations, currentConversationId]);
 
 
-  const renderFormattedText = (text: string | undefined): React.ReactNode => {
+  const renderFormattedText = (text: string | undefined, allowCustomColor: boolean): React.ReactNode => {
     if (!text) return null;
 
     // Order matters for regex: check ** first, then *
@@ -1395,17 +1394,21 @@ export default function Home() {
 
       // Color: C(colorValue)[text]C
       const colorMatch = part.match(/^C\((.+?)\)\[([\s\S]*)\]C$/);
-      if (colorMatch) {
+      if (colorMatch && allowCustomColor) { // Check allowCustomColor here
         const colorValue = colorMatch[1];
         const content = colorMatch[2];
         // Basic validation for colorValue to prevent obvious XSS if AI generates malicious values.
         // A more robust sanitization might be needed if complex CSS is allowed.
         // For now, assuming color names, hex, rgb, rgba, hsl, hsla.
         if (/^[#\w\s(),%.-]+$/.test(colorValue)) {
-           return <span key={index} style={{ color: colorValue }}>{renderFormattedText(content)}</span>;
+           return <span key={index} style={{ color: colorValue }}>{renderFormattedText(content, allowCustomColor)}</span>;
         }
-        // If colorValue is invalid, parse content without color
-        return renderFormattedText(content);
+        // If colorValue is invalid or not allowed, parse content without color
+        return renderFormattedText(content, allowCustomColor);
+      } else if (colorMatch && !allowCustomColor) {
+        // If color is not allowed, render the content of C()[]C without color, but still parse nested formats
+        const content = colorMatch[2];
+        return renderFormattedText(content, allowCustomColor);
       }
 
       return part; // Regular text
@@ -1480,9 +1483,7 @@ export default function Home() {
              {characterForMessage && !messageSenderIsUser && !isCurrentlyEditingThisMessage && (
                 <span className={`text-xs mb-0.5 ${lineThemeActive ? (isLineDark ? 'text-slate-400' : 'text-slate-600') : (isDarkMode ? 'text-slate-400' : 'text-slate-500')} opacity-90 px-1`}>
                     {characterForMessage.name}
-                    {showEmotionIcons && msg.emotion && EMOTION_EMOJIS[msg.emotion as keyof typeof EMOTION_EMOJIS] && !currentConversation?.isCharToCharConversation
-                        ? EMOTION_EMOJIS[msg.emotion as keyof typeof EMOTION_EMOJIS]
-                        : ''}
+                    {/* Emotion icon display removed */}
                 </span>
             )}
             {isCurrentlyEditingThisMessage ? (
@@ -1509,23 +1510,33 @@ export default function Home() {
                   {msg.text &&
                     <span
                         className={`whitespace-pre-wrap ${messageTextColorClass} ${currentChatFontSize}`}
-                        style={
-                            applyEmotionColorToText && !lineThemeActive && characterForMessage && !messageSenderIsUser && msg.emotion && EMOTION_COLORS[msg.emotion as keyof typeof EMOTION_COLORS] && !currentConversation?.isCharToCharConversation && !currentConversation?.isGroupChat
-                            ? { color: EMOTION_COLORS[msg.emotion as keyof typeof EMOTION_COLORS] }
-                            : {}
-                        }
+                        // Emotion-based text color styling removed, will be handled by allowAICustomTextColor and C() format.
                     >
-                        {renderFormattedText(msg.text)}
+                        {renderFormattedText(msg.text, allowAICustomTextColor && !lineThemeActive)}
                     </span>
                   }
                   {!msg.text && msg.imageUrl && <span className={`${messageTextColorClass} italic text-xs`}>画像</span>}
+
+                  {/* Continue Conversation Button for AI messages - inside the bubble */}
+                  {!isCurrentlyEditingThisMessage && !messageSenderIsUser && !currentConversation?.isGroupChat && !currentConversation?.isCharToCharConversation && !isSending && currentConversation?.messages[currentConversation.messages.length - 1]?.id === msg.id && (
+                    <button
+                        onClick={() => handleContinueConversation()}
+                        disabled={isSending}
+                        className={`absolute bottom-1 right-1 p-1 rounded-full text-xs ${isDarkMode ? 'text-slate-400 hover:text-slate-200 bg-slate-700/50 hover:bg-slate-600/70' : 'text-slate-500 hover:text-slate-700 bg-slate-200/50 hover:bg-slate-300/70'} opacity-0 group-hover:opacity-100 focus:opacity-100 transition-all duration-150`}
+                        title="AIに返信を続けさせる"
+                    >
+                        <FaPlay size={8} />
+                    </button>
+                  )}
                 </div>
             )}
-            {!isCurrentlyEditingThisMessage && (
+
+
+            {!isCurrentlyEditingThisMessage && lineThemeActive && ( // Added lineThemeActive condition here
                 <div className={`text-xs mt-0.5 flex items-center ${justifyContentClass === 'justify-end' ? 'pr-1' : 'pl-1'} ${timeAndReadStatusColor}`}>
                 {msg.sender === 'user' && ( <span className={`mr-1.5 ${msg.isRead ? timeAndReadStatusColor : 'text-transparent'}`}> {msg.isRead ? '既読' : '送信済'} </span> )}
                 <span>{formatTime(msg.timestamp)}</span>
-                {/* NEW BUTTON LOCATION STARTS HERE */}
+                {/* Edit button is kept for both modes for now, can be conditionalized if needed */}
                 {msg.sender === 'user' && !currentConversation?.isCharToCharConversation && !isSending && (
                     <button
                         onClick={() => handleEditMessage(msg.id, msg.text)}
@@ -1535,14 +1546,26 @@ export default function Home() {
                         <FaEdit size={12} />
                     </button>
                 )}
-                {/* NEW BUTTON LOCATION ENDS HERE */}
                 </div>
+            )}
+            {/* Placeholder for non-LINE UI edit button or other actions if needed, or remove if edit button stays in the block above */}
+            {!isCurrentlyEditingThisMessage && !lineThemeActive && msg.sender === 'user' && !currentConversation?.isCharToCharConversation && !isSending && (
+                 <div className={`text-xs mt-0.5 flex items-center ${justifyContentClass === 'justify-end' ? 'pr-1' : 'pl-1'} ${timeAndReadStatusColor}`}>
+                    {/* Empty div to maintain structure or add non-LINE specific footer items later */}
+                     <button
+                        onClick={() => handleEditMessage(msg.id, msg.text)}
+                        className={`p-1 rounded-full ml-2 ${isDarkMode ? 'text-slate-400 hover:text-slate-200 hover:bg-slate-700' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-300'} transition-colors`}
+                        title="編集"
+                    >
+                        <FaEdit size={12} />
+                    </button>
+                 </div>
             )}
           </div>
         </div>
       </div>
     )
-  }), [isDarkMode, lineThemeActive, effectiveTextColor, characters, currentConversation, showEmotionIcons, generalTextColor, timeAndReadStatusColor, isLineDark, editingMessageId, handleCancelEditMessage, handleSaveEditMessage, handleEditMessage, currentCharacterForNormalChat, isSending, generalInputFieldBgColor, generalBorderColor, applyEmotionColorToText]);
+  }), [isDarkMode, lineThemeActive, effectiveTextColor, characters, currentConversation, generalTextColor, timeAndReadStatusColor, isLineDark, editingMessageId, handleCancelEditMessage, handleSaveEditMessage, handleEditMessage, currentCharacterForNormalChat, isSending, generalInputFieldBgColor, generalBorderColor, allowAICustomTextColor]); // Changed applyEmotionColorToText to allowAICustomTextColor
 
   const getModeIcon = useCallback((mode?: 'auto' | 'battle' | 'debate') => {
     if (mode === 'battle') return <FaFistRaised className="mr-2" />;
@@ -1706,17 +1729,17 @@ export default function Home() {
               <label className={`text-sm font-medium ${sidebarActualTextColor}`}>検閲を使用</label>
               <button onClick={() => setUseCensorship(!useCensorship)} className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all duration-150 shadow-sm ${useCensorship ? 'bg-red-500 hover:bg-red-600 text-white' : `${isDarkMode ? 'bg-slate-600 hover:bg-slate-500' : 'bg-slate-200 hover:bg-slate-300'} ${sidebarActualTextColor}`}`}> {useCensorship ? 'オン' : 'オフ'} </button>
             </div>
-            <div className="flex items-center justify-between">
+            {/* <div className="flex items-center justify-between">
               <label className={`text-sm font-medium ${sidebarActualTextColor}`}>感情アイコン表示</label>
               <button onClick={() => setShowEmotionIcons(!showEmotionIcons)} className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all duration-150 shadow-sm ${showEmotionIcons ? 'bg-indigo-500 hover:bg-indigo-600 text-white' : `${isDarkMode ? 'bg-slate-600 hover:bg-slate-500' : 'bg-slate-200 hover:bg-slate-300'} ${sidebarActualTextColor}`}`}> {showEmotionIcons ? 'オン' : 'オフ'} </button>
-            </div>
+            </div> */}
             <div className="flex items-center justify-between">
               <label className={`text-sm font-medium ${sidebarActualTextColor}`}>LINE風テーマ</label>
               <button onClick={() => setLineThemeActive(!lineThemeActive)} className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all duration-150 shadow-sm ${lineThemeActive ? 'bg-green-500 hover:bg-green-600 text-white' : `${isDarkMode ? 'bg-slate-600 hover:bg-slate-500' : 'bg-slate-200 hover:bg-slate-300'} ${sidebarActualTextColor}`}`}> {lineThemeActive ? 'オン' : 'オフ'} </button>
             </div>
             <div className="flex items-center justify-between">
-              <label className={`text-sm font-medium ${sidebarActualTextColor}`}>AI文字色(感情)</label>
-              <button onClick={() => setApplyEmotionColorToText(!applyEmotionColorToText)} className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all duration-150 shadow-sm ${applyEmotionColorToText ? 'bg-teal-500 hover:bg-teal-600 text-white' : `${isDarkMode ? 'bg-slate-600 hover:bg-slate-500' : 'bg-slate-200 hover:bg-slate-300'} ${sidebarActualTextColor}`}`}> {applyEmotionColorToText ? 'オン' : 'オフ'} </button>
+              <label className={`text-sm font-medium ${sidebarActualTextColor}`}>AIによる文字色指定を許可</label>
+              <button onClick={() => setAllowAICustomTextColor(!allowAICustomTextColor)} className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all duration-150 shadow-sm ${allowAICustomTextColor ? 'bg-teal-500 hover:bg-teal-600 text-white' : `${isDarkMode ? 'bg-slate-600 hover:bg-slate-500' : 'bg-slate-200 hover:bg-slate-300'} ${sidebarActualTextColor}`}`}> {allowAICustomTextColor ? 'オン' : 'オフ'} </button>
             </div>
 
             <div>
@@ -1813,14 +1836,7 @@ export default function Home() {
                 <button onClick={() => fileInputRef.current?.click()} className={`p-2.5 rounded-lg ${currentModelSupportsImage ? `hover:${isDarkMode ?'bg-slate-600/70':'bg-slate-200/70'} cursor-pointer` : 'opacity-50 cursor-not-allowed'} ${inputFieldActualTextColor} transition-colors`} title={currentModelSupportsImage ? "画像添付" : "現在のモデルは画像に非対応です"} disabled={!currentModelSupportsImage}> <FaPaperclip size={18}/> </button>
                 <input ref={fileInputRef} id="image-upload-hidden" type="file" accept="image/*" className="hidden" onChange={handleImageFileSelect} disabled={!currentModelSupportsImage}/>
                 <input type="text" value={input} onChange={(e) => setInput(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && !isSending && sendMessage()} placeholder={currentConversation?.isGroupChat ? 'グループメッセージを送信...' : `${currentCharacterForNormalChat?.name || ''}にメッセージを送信...`} className={`flex-1 px-3 py-2.5 rounded-lg bg-transparent focus:outline-none text-sm sm:text-base ${inputFieldActualTextColor} placeholder-${isDarkMode || (lineThemeActive && isLineDark)?'text-slate-500':'text-slate-400'}`} disabled={isSending} />
-                <button
-                  onClick={() => handleContinueConversation()}
-                  disabled={isSending || !currentConversation || currentConversation.messages.length === 0 || currentConversation.messages[currentConversation.messages.length -1].sender === 'user' || currentConversation.isGroupChat || currentConversation.isCharToCharConversation}
-                  className={`p-3 rounded-lg text-white transition-all duration-150 ease-in-out ${isSending || !currentConversation || currentConversation.messages.length === 0 || currentConversation.messages[currentConversation.messages.length -1].sender === 'user' || currentConversation.isGroupChat || currentConversation.isCharToCharConversation ? (isDarkMode || (lineThemeActive && isLineDark)?'bg-slate-600 cursor-not-allowed':'bg-slate-300 cursor-not-allowed') : (lineThemeActive && !isLineDark ? 'bg-sky-500 hover:bg-sky-600 active:bg-sky-700' : 'bg-blue-500 hover:bg-blue-600 active:bg-blue-700')} shadow-sm mr-1.5`}
-                  title="AIに返信を続けさせる"
-                >
-                  <FaPlay size={16} />
-                </button>
+                {/* Continue conversation button removed from here */}
                 <button onClick={() => sendMessage()} disabled={isSending || (!input.trim() && !imageToSend) || (imageToSend && !currentModelSupportsImage) } className={`p-3 rounded-lg text-white transition-all duration-150 ease-in-out ${isSending || (!input.trim() && !imageToSend) || (imageToSend && !currentModelSupportsImage) ? (isDarkMode || (lineThemeActive && isLineDark)?'bg-slate-500 cursor-not-allowed':'bg-slate-400 cursor-not-allowed') : (lineThemeActive && !isLineDark ? 'bg-green-500 hover:bg-green-600 active:bg-green-700' : 'bg-indigo-500 hover:bg-indigo-600 active:bg-indigo-700')} shadow-sm`} title="送信"> {isSending ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : <FaPaperPlane size={18}/>} </button>
               </div>
             </div>
