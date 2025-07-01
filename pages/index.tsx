@@ -156,6 +156,7 @@ export default function Home() {
   const [imageToSend, setImageToSend] = useState<{ file: File; url: string } | null>(null);
   const [displayedQuote, setDisplayedQuote] = useState<{ quote: string; author: string } | null>(null);
   const [chatFontSize, setChatFontSize] = useState('text-sm'); // Added state for chat font size
+  const [applyEmotionColorToText, setApplyEmotionColorToText] = useState(false); // Added state for emotion color application
 
   const [showCharToCharSelectModal, setShowCharToCharSelectModal] = useState(false);
   const [charToCharCandidates, setCharToCharCandidates] = useState<[string | null, string | null]>([null, null]);
@@ -234,9 +235,11 @@ export default function Home() {
         setDisplayedQuote(data.displayedQuote || null);
         setIsAutoReplying(data.isAutoReplying || false);
         setChatFontSize(data.chatFontSize || 'text-sm'); // Load chat font size
+        setApplyEmotionColorToText(data.applyEmotionColorToText || false); // Load emotion color setting
       } else {
         setBackgroundColor(Object.keys(LIGHT_MODE_CHAT_BACKGROUNDS)[0]);
         setChatFontSize('text-sm'); // Default if no saved data
+        setApplyEmotionColorToText(false); // Default
       }
     } catch (error) {
       console.error("Failed to load or parse data from localStorage:", error);
@@ -272,7 +275,8 @@ export default function Home() {
           conversations, characters, currentConversationId, currentCharacterId,
           backgroundColor, isDarkMode, useCensorship,
           lineThemeActive, showEmotionIcons, displayedQuote, isAutoReplying,
-          chatFontSize // Save chat font size
+          chatFontSize, // Save chat font size
+          applyEmotionColorToText // Save emotion color setting
         };
         localStorage.setItem('chatAppData', JSON.stringify(data));
     }
@@ -1251,6 +1255,89 @@ export default function Home() {
     sendMessage(editingMessageText, editingMessageId);
   }, [editingMessageId, editingMessageText, sendMessage, handleCancelEditMessage]);
 
+  const handleContinueConversation = useCallback(async () => {
+    if (!currentConversation || currentConversation.isCharToCharConversation || currentConversation.isGroupChat || !currentCharacterForNormalChat || isSending) {
+      return;
+    }
+
+    const lastMessage = currentConversation.messages.length > 0 ? currentConversation.messages[currentConversation.messages.length - 1] : null;
+    if (!lastMessage || lastMessage.sender === 'user') {
+      // Should be disabled by button logic, but good to double check
+      return;
+    }
+
+    setIsSending(true);
+
+    try {
+      const messagesForApiContext = currentConversation.messages;
+      const historyForApi = messagesForApiContext.slice(-API_MESSAGE_HISTORY_COUNT).map(msg => {
+        let content = msg.text;
+        if (msg.imageUrl && msg.sender === 'user') {
+            content = `${content} (ユーザーがこの画像を添付しました。画像の内容をよく見て、関連する返答をしてください。)`;
+        } else if (msg.imageUrl) {
+            content = `${content} (画像添付あり)`;
+        }
+        return {
+            role: msg.sender === 'user' ? 'user' : 'assistant',
+            content: content.replace(/\[感情:.+?\]/, '').trim()
+        };
+      });
+
+      // Add a prompt to encourage continuation
+      const continuationPrompt = { role: 'user', content: "続けてください。" }; // Simple prompt
+
+      const messagesPayload = [
+        { role: 'system', content: FORMATTING_INSTRUCTIONS_PROMPT },
+        { role: 'system', content: currentCharacterForNormalChat.systemPrompt },
+        ...historyForApi,
+        continuationPrompt // Add the continuation prompt here
+      ];
+
+      const apiRequestBody: ChutesApiRequestBody = {
+        model,
+        messages: messagesPayload,
+        temperature,
+        useCensorship
+      };
+
+      const response = await fetch('/api/chutes', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(apiRequestBody)
+      });
+
+      if (!response.ok) { const errorData = await response.text(); throw new Error(`HTTP error! status: ${response.status}, message: ${errorData}`); }
+      const data = await response.json();
+      let rawReply = data.reply || 'エラーが発生しました。応答がありません。';
+      let cleanedReply = cleanAIReply(rawReply);
+      const emotion = extractEmotion(cleanedReply);
+      const finalReplyText = cleanedReply.replace(/\[感情:.+?\]/, '').trim();
+
+      const aiMessage: Message = {
+          id: `${Date.now()}-ai-continue`,
+          sender: currentCharacterForNormalChat.id,
+          text: finalReplyText, timestamp: new Date(), emotion: emotion, isRead: false
+      };
+      setConversations(prev => prev.map(conv =>
+          conv.id === currentConversationId ? { ...conv, messages: [...conv.messages, aiMessage] } : conv
+      ));
+
+    } catch (error) {
+        console.error('handleContinueConversation Error:', error);
+        const errorMessage: Message = {
+            id: `${Date.now()}-error-continue`, sender: currentCharacterForNormalChat.id,
+            text: '連続応答の生成中にエラーが発生しました。',
+            timestamp: new Date(), emotion: '悲しみ'
+        };
+        setConversations(prev => prev.map(conv =>
+            conv.id === currentConversationId ? { ...conv, messages: [...conv.messages, errorMessage] } : conv
+        ));
+    } finally {
+        setIsSending(false);
+    }
+
+  }, [currentConversation, currentCharacterForNormalChat, isSending, model, temperature, useCensorship, conversations, currentConversationId]);
+
+
   const renderFormattedText = (text: string | undefined): React.ReactNode => {
     if (!text) return null;
 
@@ -1355,6 +1442,10 @@ export default function Home() {
     }
 
     let bubbleClass = ''; let messageTextColorClass = effectiveTextColor;
+    let messageContainerClass = `max-w-[90%] sm:max-w-[85%] flex ${justifyContentClass === 'justify-end' ? 'flex-row-reverse' : 'flex-row'}`;
+    let messageContentContainerClass = `flex flex-col w-full ${justifyContentClass === 'justify-end' ? 'items-end' : 'items-start'}`;
+    let messageWrapperDivClass = `flex ${justifyContentClass} mb-1.5 px-2 group relative`;
+
     if (lineThemeActive) {
       if (justifyContentClass === 'justify-end') {
         bubbleClass = `rounded-tr-none ${isLineDark ? 'bg-green-700 text-gray-100' : 'bg-[#90EE90] text-black'}`;
@@ -1363,21 +1454,21 @@ export default function Home() {
         bubbleClass = `rounded-tl-none ${isLineDark ? 'bg-slate-700 text-slate-100' : 'bg-white text-black'}`;
         messageTextColorClass = isLineDark ? 'text-slate-100' : 'text-black';
       }
+      bubbleClass += ' relative rounded-xl px-3.5 py-2.5 shadow-md break-words min-w-[70px]';
     } else {
-      if (justifyContentClass === 'justify-end') {
-        bubbleClass = `bg-indigo-500 text-white rounded-tr-none`;
-        messageTextColorClass = 'text-white';
-      } else {
-        bubbleClass = `${isDarkMode ? 'bg-slate-700' : 'bg-slate-200'} ${generalTextColor} rounded-tl-none`;
-        messageTextColorClass = generalTextColor;
-      }
+      // Not LINE Theme - No bubble, more space
+      bubbleClass = 'py-1'; // Minimal padding for non-bubble text
+      messageTextColorClass = generalTextColor;
+      messageContainerClass = `w-full flex ${justifyContentClass === 'justify-end' ? 'flex-row-reverse' : 'flex-row'}`; // Take full width
+      messageContentContainerClass = `flex flex-col w-full ${justifyContentClass === 'justify-end' ? 'items-end' : 'items-start'}`;
+      messageWrapperDivClass = `flex ${justifyContentClass} mb-2 group relative`; // Increased bottom margin for more space
     }
 
     const isCurrentlyEditingThisMessage = editingMessageId === msg.id;
 
     return (
-      <div className={`flex ${justifyContentClass} mb-1.5 px-2 group relative`}>
-        <div className={`max-w-[90%] sm:max-w-[85%] flex ${justifyContentClass === 'justify-end' ? 'flex-row-reverse' : 'flex-row'}`}>
+      <div className={messageWrapperDivClass}>
+        <div className={messageContainerClass}>
           <div className={`flex-shrink-0 self-start mt-1 ${justifyContentClass === 'justify-end' ? 'ml-2' : 'mr-2'}`}>
             {characterForMessage && !messageSenderIsUser ? (
               <div className="text-3xl w-9 h-9 rounded-full flex items-center justify-center shadow-sm" style={{ backgroundColor: characterForMessage?.color || '#A0AEC0' }}> {characterForMessage?.icon || '👤'} </div>
@@ -1385,7 +1476,7 @@ export default function Home() {
               <div className={`text-2xl w-9 h-9 rounded-full flex items-center justify-center shadow-sm ${lineThemeActive && !isLineDark ? 'bg-slate-200 text-slate-600' : (isDarkMode || (lineThemeActive && isLineDark) ? 'bg-slate-600 text-indigo-400' : 'bg-slate-300 text-indigo-500')}`}> <FaUserCircle /> </div>
             ) : null}
           </div>
-          <div className={`flex flex-col w-full ${justifyContentClass === 'justify-end' ? 'items-end' : 'items-start'}`}>
+          <div className={messageContentContainerClass}>
              {characterForMessage && !messageSenderIsUser && !isCurrentlyEditingThisMessage && (
                 <span className={`text-xs mb-0.5 ${lineThemeActive ? (isLineDark ? 'text-slate-400' : 'text-slate-600') : (isDarkMode ? 'text-slate-400' : 'text-slate-500')} opacity-90 px-1`}>
                     {characterForMessage.name}
@@ -1413,10 +1504,20 @@ export default function Home() {
                     </div>
                 </div>
             ) : (
-                <div className={`relative rounded-xl px-3.5 py-2.5 shadow-md break-words min-w-[70px] ${bubbleClass}`}
-                  style={ characterForMessage && !messageSenderIsUser && msg.emotion && EMOTION_COLORS[msg.emotion as keyof typeof EMOTION_COLORS] && !lineThemeActive && !currentConversation?.isCharToCharConversation ? { borderLeft: justifyContentClass === 'justify-start' ? `4px solid ${EMOTION_COLORS[msg.emotion as keyof typeof EMOTION_COLORS]}` : '', borderRight: justifyContentClass === 'justify-end' ? `4px solid ${EMOTION_COLORS[msg.emotion as keyof typeof EMOTION_COLORS]}`:'' } : {} } >
+                <div className={bubbleClass}>
                   {msg.imageUrl && ( <img src={msg.imageUrl} alt="送信された画像" className="max-w-full max-h-60 rounded-lg mb-2 cursor-pointer shadow-sm" onClick={() => window.open(msg.imageUrl, '_blank')} /> )}
-                  {msg.text && <span className={`whitespace-pre-wrap ${messageTextColorClass} ${currentChatFontSize}`}>{renderFormattedText(msg.text)}</span>}
+                  {msg.text &&
+                    <span
+                        className={`whitespace-pre-wrap ${messageTextColorClass} ${currentChatFontSize}`}
+                        style={
+                            applyEmotionColorToText && !lineThemeActive && characterForMessage && !messageSenderIsUser && msg.emotion && EMOTION_COLORS[msg.emotion as keyof typeof EMOTION_COLORS] && !currentConversation?.isCharToCharConversation && !currentConversation?.isGroupChat
+                            ? { color: EMOTION_COLORS[msg.emotion as keyof typeof EMOTION_COLORS] }
+                            : {}
+                        }
+                    >
+                        {renderFormattedText(msg.text)}
+                    </span>
+                  }
                   {!msg.text && msg.imageUrl && <span className={`${messageTextColorClass} italic text-xs`}>画像</span>}
                 </div>
             )}
@@ -1441,7 +1542,7 @@ export default function Home() {
         </div>
       </div>
     )
-  }), [isDarkMode, lineThemeActive, effectiveTextColor, characters, currentConversation, showEmotionIcons, generalTextColor, timeAndReadStatusColor, isLineDark, editingMessageId, handleCancelEditMessage, handleSaveEditMessage, handleEditMessage, currentCharacterForNormalChat, isSending, generalInputFieldBgColor, generalBorderColor]);
+  }), [isDarkMode, lineThemeActive, effectiveTextColor, characters, currentConversation, showEmotionIcons, generalTextColor, timeAndReadStatusColor, isLineDark, editingMessageId, handleCancelEditMessage, handleSaveEditMessage, handleEditMessage, currentCharacterForNormalChat, isSending, generalInputFieldBgColor, generalBorderColor, applyEmotionColorToText]);
 
   const getModeIcon = useCallback((mode?: 'auto' | 'battle' | 'debate') => {
     if (mode === 'battle') return <FaFistRaised className="mr-2" />;
@@ -1613,6 +1714,10 @@ export default function Home() {
               <label className={`text-sm font-medium ${sidebarActualTextColor}`}>LINE風テーマ</label>
               <button onClick={() => setLineThemeActive(!lineThemeActive)} className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all duration-150 shadow-sm ${lineThemeActive ? 'bg-green-500 hover:bg-green-600 text-white' : `${isDarkMode ? 'bg-slate-600 hover:bg-slate-500' : 'bg-slate-200 hover:bg-slate-300'} ${sidebarActualTextColor}`}`}> {lineThemeActive ? 'オン' : 'オフ'} </button>
             </div>
+            <div className="flex items-center justify-between">
+              <label className={`text-sm font-medium ${sidebarActualTextColor}`}>AI文字色(感情)</label>
+              <button onClick={() => setApplyEmotionColorToText(!applyEmotionColorToText)} className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all duration-150 shadow-sm ${applyEmotionColorToText ? 'bg-teal-500 hover:bg-teal-600 text-white' : `${isDarkMode ? 'bg-slate-600 hover:bg-slate-500' : 'bg-slate-200 hover:bg-slate-300'} ${sidebarActualTextColor}`}`}> {applyEmotionColorToText ? 'オン' : 'オフ'} </button>
+            </div>
 
             <div>
               <label className={`block text-sm font-medium mb-1.5 ${sidebarActualTextColor}`}>チャットフォントサイズ</label>
@@ -1686,7 +1791,7 @@ export default function Home() {
                 </button>
             )}
           </div>
-          <div ref={chatMessagesContainerRef} className="flex-1 overflow-y-auto p-4 space-y-1 scroll-smooth custom-scrollbar" style={{ backgroundColor: chatMessagesListActualBg }}>
+           <div ref={chatMessagesContainerRef} className={`flex-1 overflow-y-auto space-y-1 scroll-smooth custom-scrollbar ${lineThemeActive ? 'p-4' : 'p-2 sm:p-4'}`} style={{ backgroundColor: chatMessagesListActualBg }}>
             {currentConversation && currentConversation.messages.map((msg) => ( <MessageItem key={msg.id} msg={msg} currentChatFontSize={chatFontSize} /> ))}
             <div ref={messagesEndRef} />
             {!currentConversation && ( <div className={`text-center ${effectiveTextColor} opacity-50 mt-16 flex flex-col items-center`}> <FaRobot size={60} className="mx-auto mb-6 opacity-70"/> <p className="text-lg">会話を開始するか、既存の会話を選択してください。</p> </div> )}
@@ -1708,6 +1813,14 @@ export default function Home() {
                 <button onClick={() => fileInputRef.current?.click()} className={`p-2.5 rounded-lg ${currentModelSupportsImage ? `hover:${isDarkMode ?'bg-slate-600/70':'bg-slate-200/70'} cursor-pointer` : 'opacity-50 cursor-not-allowed'} ${inputFieldActualTextColor} transition-colors`} title={currentModelSupportsImage ? "画像添付" : "現在のモデルは画像に非対応です"} disabled={!currentModelSupportsImage}> <FaPaperclip size={18}/> </button>
                 <input ref={fileInputRef} id="image-upload-hidden" type="file" accept="image/*" className="hidden" onChange={handleImageFileSelect} disabled={!currentModelSupportsImage}/>
                 <input type="text" value={input} onChange={(e) => setInput(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && !isSending && sendMessage()} placeholder={currentConversation?.isGroupChat ? 'グループメッセージを送信...' : `${currentCharacterForNormalChat?.name || ''}にメッセージを送信...`} className={`flex-1 px-3 py-2.5 rounded-lg bg-transparent focus:outline-none text-sm sm:text-base ${inputFieldActualTextColor} placeholder-${isDarkMode || (lineThemeActive && isLineDark)?'text-slate-500':'text-slate-400'}`} disabled={isSending} />
+                <button
+                  onClick={() => handleContinueConversation()}
+                  disabled={isSending || !currentConversation || currentConversation.messages.length === 0 || currentConversation.messages[currentConversation.messages.length -1].sender === 'user' || currentConversation.isGroupChat || currentConversation.isCharToCharConversation}
+                  className={`p-3 rounded-lg text-white transition-all duration-150 ease-in-out ${isSending || !currentConversation || currentConversation.messages.length === 0 || currentConversation.messages[currentConversation.messages.length -1].sender === 'user' || currentConversation.isGroupChat || currentConversation.isCharToCharConversation ? (isDarkMode || (lineThemeActive && isLineDark)?'bg-slate-600 cursor-not-allowed':'bg-slate-300 cursor-not-allowed') : (lineThemeActive && !isLineDark ? 'bg-sky-500 hover:bg-sky-600 active:bg-sky-700' : 'bg-blue-500 hover:bg-blue-600 active:bg-blue-700')} shadow-sm mr-1.5`}
+                  title="AIに返信を続けさせる"
+                >
+                  <FaPlay size={16} />
+                </button>
                 <button onClick={() => sendMessage()} disabled={isSending || (!input.trim() && !imageToSend) || (imageToSend && !currentModelSupportsImage) } className={`p-3 rounded-lg text-white transition-all duration-150 ease-in-out ${isSending || (!input.trim() && !imageToSend) || (imageToSend && !currentModelSupportsImage) ? (isDarkMode || (lineThemeActive && isLineDark)?'bg-slate-500 cursor-not-allowed':'bg-slate-400 cursor-not-allowed') : (lineThemeActive && !isLineDark ? 'bg-green-500 hover:bg-green-600 active:bg-green-700' : 'bg-indigo-500 hover:bg-indigo-600 active:bg-indigo-700')} shadow-sm`} title="送信"> {isSending ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : <FaPaperPlane size={18}/>} </button>
               </div>
             </div>
