@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import {
     FaUserCircle, FaImage, FaPlus, FaEdit, FaTimes, FaRobot, FaTrash, FaPaperPlane,
     FaBars, FaQuestionCircle, FaPaperclip, FaTimesCircle, FaQuoteLeft, FaComments,
-    FaPlay, FaStop, FaFistRaised, FaBalanceScale, FaCommentDots, FaSave, FaUndo, FaUsers
+    FaPlay, FaStop, FaFistRaised, FaBalanceScale, FaCommentDots, FaSave, FaUndo, FaUsers, FaCog
 } from 'react-icons/fa';
 import ConfirmationDialog from '../components/ui/ConfirmationDialog'; // Added import
 import GroupChatCreationModal from '../components/GroupChatCreationModal';
@@ -51,6 +51,8 @@ interface ChutesApiRequestBody {
   model: string;
   messages: Array<{ role: string; content: string }>;
   temperature: number;
+  top_p?: number;
+  top_k?: number;
   useCensorship: boolean;
   imageDataUrl?: string;
 }
@@ -92,9 +94,9 @@ const DARK_MODE_CHAT_BACKGROUNDS = {
 // const EMOTION_EMOJIS = {
 //     '怒り': '😠', '悲しみ': '😢', '喜び': '😊', '驚き': '😲', '平静': '🙂'
 // };
-const QUICK_MESSAGES = [
-    { id: '1', text: 'こんにちは！' }, { id: '2', text: 'ありがとう！' }, { id: '3', text: 'いいね' }
-];
+// const QUICK_MESSAGES = [
+//     { id: '1', text: 'こんにちは！' }, { id: '2', text: 'ありがとう！' }, { id: '3', text: 'いいね' }
+// ];
 
 // --- Helper Functions ---
 const formatTime = (date: Date | string): string => {
@@ -127,6 +129,57 @@ const cleanAIReply = (reply: string): string => {
   return cleanedReply.trim();
 };
 
+// Helper function to handle streaming API responses
+async function handleStreamingResponse(
+  responseBody: ReadableStream<Uint8Array>,
+  aiMessageId: string,
+  conversationId: string,
+  characterId: string, // Sender of the AI message
+  setStreamingMessageId: (id: string | null) => void,
+  setStreamingMessageText: (text: string) => void,
+  setConversations: React.Dispatch<React.SetStateAction<Conversation[]>>
+) {
+  const reader = responseBody.getReader();
+  const decoder = new TextDecoder();
+  let accumulatedText = "";
+  setStreamingMessageId(aiMessageId);
+  setStreamingMessageText(""); // Reset before streaming
+
+  // Add a placeholder message for streaming
+  const placeholderAiMessage: Message = {
+    id: aiMessageId,
+    sender: characterId,
+    text: "生成中...", // Placeholder text
+    timestamp: new Date(),
+    isRead: false,
+  };
+  setConversations(prev => prev.map(conv =>
+    conv.id === conversationId ? { ...conv, messages: [...conv.messages, placeholderAiMessage] } : conv
+  ));
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    accumulatedText += decoder.decode(value, { stream: true });
+    setStreamingMessageText(cleanAIReply(accumulatedText));
+  }
+
+  const finalReplyText = cleanAIReply(accumulatedText);
+  setConversations(prev => prev.map(conv => {
+    if (conv.id === conversationId) {
+      return {
+        ...conv,
+        messages: conv.messages.map(msg =>
+          msg.id === aiMessageId ? { ...msg, text: finalReplyText, isRead: false } : msg
+        )
+      };
+    }
+    return conv;
+  }));
+  setStreamingMessageId(null);
+  setStreamingMessageText("");
+}
+
 
 export default function Home() {
   const [conversations, setConversations] = useState<Conversation[]>([])
@@ -135,6 +188,8 @@ export default function Home() {
   const [model, setModel] = useState('deepseek-ai/DeepSeek-V3-0324')
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [temperature, setTemperature] = useState(0.7)
+  const [topP, setTopP] = useState(1.0);
+  const [topK, setTopK] = useState(50);
   const [backgroundColor, setBackgroundColor] = useState('ペールグレー')
   const [characters, setCharacters] = useState<Character[]>([])
   const [currentCharacterId, setCurrentCharacterId] = useState<string>('')
@@ -175,6 +230,10 @@ export default function Home() {
   const [characterToDeleteId, setCharacterToDeleteId] = useState<string | null>(null); // Added state
   const [characterDeleteMessage, setCharacterDeleteMessage] = useState(''); // Added state
   const [showGroupChatModal, setShowGroupChatModal] = useState(false);
+  const [showAdvancedSettingsModal, setShowAdvancedSettingsModal] = useState(false);
+  const [suggestedReplies, setSuggestedReplies] = useState<string[]>([]);
+  const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
+  const [streamingMessageText, setStreamingMessageText] = useState<string>('');
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const chatMessagesContainerRef = useRef<HTMLDivElement>(null)
@@ -235,6 +294,9 @@ export default function Home() {
         setIsAutoReplying(data.isAutoReplying || false);
         setChatFontSize(data.chatFontSize || 'text-sm'); // Load chat font size
         setAllowAICustomTextColor(data.allowAICustomTextColor === undefined ? true : data.allowAICustomTextColor);
+        setTemperature(data.temperature === undefined ? 0.7 : data.temperature);
+        setTopP(data.topP === undefined ? 1.0 : data.topP);
+        setTopK(data.topK === undefined ? 50 : data.topK);
       } else {
         setBackgroundColor(Object.keys(LIGHT_MODE_CHAT_BACKGROUNDS)[0]);
         setChatFontSize('text-sm'); // Default if no saved data
@@ -275,11 +337,12 @@ export default function Home() {
           backgroundColor, isDarkMode, useCensorship,
            lineThemeActive, displayedQuote, isAutoReplying, // showEmotionIcons removed
           chatFontSize, // Save chat font size
-           allowAICustomTextColor // Save new setting
+           allowAICustomTextColor, // Save new setting
+           temperature, topP, topK // Save advanced settings
         };
         localStorage.setItem('chatAppData', JSON.stringify(data));
     }
-  }, [conversations, characters, currentConversationId, currentCharacterId, backgroundColor, isDarkMode, useCensorship, lineThemeActive, displayedQuote, isAutoReplying, chatFontSize, allowAICustomTextColor]);
+  }, [conversations, characters, currentConversationId, currentCharacterId, backgroundColor, isDarkMode, useCensorship, lineThemeActive, displayedQuote, isAutoReplying, chatFontSize, allowAICustomTextColor, temperature, topP, topK]);
 
   useEffect(() => {
     const sidebarElement = sidebarRef.current;
@@ -362,6 +425,7 @@ export default function Home() {
         setCurrentCharacterId(targetCharId);
     }
     setIsAutoReplying(false);
+    setSuggestedReplies([]);
     if (window.innerWidth < 1024) setSidebarOpen(false);
   }, [currentCharacterId, characters, conversations]);
 
@@ -391,6 +455,7 @@ export default function Home() {
     setCurrentCharacterId(''); // No single current character for group chat
     setShowGroupChatModal(false);
     setIsAutoReplying(false);
+    setSuggestedReplies([]);
     if (window.innerWidth < 1024) setSidebarOpen(false);
   }, [characters]);
 
@@ -427,6 +492,7 @@ export default function Home() {
         setCurrentCharacterId(selectedConv.characterId);
         setIsAutoReplying(false);
     }
+    setSuggestedReplies([]);
     if (window.innerWidth < 1024) setSidebarOpen(false);
   }, [conversations]);
 
@@ -469,6 +535,7 @@ export default function Home() {
 
   const switchToCharacter = useCallback((characterId: string) => {
     setCurrentCharacterId(characterId);
+    setSuggestedReplies([]);
     if (window.innerWidth < 1024) setSidebarOpen(false);
   }, []);
 
@@ -499,6 +566,7 @@ export default function Home() {
         return;
     }
 
+    setSuggestedReplies([]); // Clear previous suggestions
     setIsSending(true);
     let userMessageIdForReadUpdate = '';
 
@@ -509,19 +577,23 @@ export default function Home() {
                 if (conv.id === currentConversationId) {
                     const messageIndex = conv.messages.findIndex(msg => msg.id === editedMessageId);
                     if (messageIndex === -1) return conv;
-                    const updatedMessages = conv.messages.map((msg, index) => {
-                      if (index === messageIndex) {
-                        return {
-                          ...msg,
-                          text: textToSend,
-                          isEditing: false,
-                          originalText: undefined, // Clear original text after successful edit
-                          timestamp: new Date(),
-                          imageUrl: localImageDataUrl,
-                        };
-                      }
-                      return msg;
-                    });
+
+                    // Create the updated user message
+                    const updatedUserMessage: Message = {
+                        ...conv.messages[messageIndex],
+                        text: textToSend,
+                        isEditing: false,
+                        originalText: undefined,
+                        timestamp: new Date(),
+                        imageUrl: localImageDataUrl,
+                    };
+
+                    // Rebuild messages: take messages up to the edited one, add the updated one,
+                    // and discard AI messages that followed the original user message.
+                    // The subsequent API call will generate a new AI response.
+                    const messagesUpToEdited = conv.messages.slice(0, messageIndex);
+                    const updatedMessages = [...messagesUpToEdited, updatedUserMessage];
+
                     return { ...conv, messages: updatedMessages };
                 }
                 return conv;
@@ -598,7 +670,7 @@ export default function Home() {
                   { role: 'system', content: character.systemPrompt },
                   ...historyForApi
                 ];
-                const apiRequestBody: ChutesApiRequestBody = { model, messages: messagesPayload, temperature, useCensorship };
+                const apiRequestBody: ChutesApiRequestBody = { model, messages: messagesPayload, temperature, top_p: topP, top_k: topK, useCensorship };
 
                 if (localImageDataUrl && currentModelSupportsImage) { // User's image sent to all AIs
                     apiRequestBody.imageDataUrl = localImageDataUrl;
@@ -680,7 +752,7 @@ export default function Home() {
               { role: 'system', content: currentCharacterForNormalChat.systemPrompt },
               ...historyForApi
             ];
-            const apiRequestBody: ChutesApiRequestBody = { model, messages: messagesPayload, temperature, useCensorship };
+            const apiRequestBody: ChutesApiRequestBody = { model, messages: messagesPayload, temperature, top_p: topP, top_k: topK, useCensorship };
             if (isImageMessage && localImageDataUrl && currentModelSupportsImage && !editedMessageId) {
                 apiRequestBody.imageDataUrl = localImageDataUrl;
             }
@@ -690,24 +762,90 @@ export default function Home() {
                 body: JSON.stringify(apiRequestBody)
             });
 
-            if (!response.ok) { const errorData = await response.text(); throw new Error(`HTTP error! status: ${response.status}, message: ${errorData}`); }
-            const data = await response.json();
-            let rawReply = data.reply || 'エラーが発生しました。応答がありません。';
-            let cleanedReply = cleanAIReply(rawReply);
-            // const emotion = extractEmotion(cleanedReply); // Emotion removed
-            const finalReplyText = cleanedReply.replace(/\[感情:.+?\]/, '').trim(); // Keep this to remove any residual emotion tags
+            if (!response.ok) {
+                const errorData = await response.text();
+                throw new Error(`HTTP error! status: ${response.status}, message: ${errorData}`);
+            }
 
-            const aiMessage: Message = {
-                id: `${Date.now()}-ai`,
-                sender: currentCharacterForNormalChat.id,
-                text: finalReplyText, timestamp: new Date(), isRead: false
-            };
-            setConversations(prev => prev.map(conv =>
-                conv.id === currentConversationId ? { ...conv, messages: [...conv.messages, aiMessage] } : conv
-            ));
+            if (response.body && currentCharacterForNormalChat && currentConversationId) {
+                await handleStreamingResponse(
+                    response.body,
+                    `${Date.now()}-ai-streaming`,
+                    currentConversationId,
+                    currentCharacterForNormalChat.id,
+                    setStreamingMessageId,
+                    setStreamingMessageText,
+                    setConversations
+                );
+            } else { // Fallback for non-streaming responses (e.g. error or if API doesn't stream)
+                const data = await response.json();
+                let rawReply = data.reply || 'エラーが発生しました。応答がありません。';
+                let cleanedReply = cleanAIReply(rawReply);
+                const finalReplyText = cleanedReply.replace(/\[感情:.+?\]/, '').trim();
+
+                const aiMessage: Message = {
+                    id: `${Date.now()}-ai`,
+                    sender: currentCharacterForNormalChat.id,
+                    text: finalReplyText, timestamp: new Date(), isRead: false
+                };
+                setConversations(prev => prev.map(conv =>
+                    conv.id === currentConversationId ? { ...conv, messages: [...conv.messages, aiMessage] } : conv
+                ));
+            }
+
+            // Fetch suggested replies - common for 1-on-1 and after all group messages
+            if (!editedMessageId) { // Only fetch suggestions for new messages, not edits
+              const currentConvForSuggestions = (await new Promise<Conversation[]>(resolve => setConversations(prev => { resolve(prev); return prev; }))).find(c => c.id === currentConversationId);
+              if (currentConvForSuggestions && (currentConvForSuggestions.isGroupChat || currentCharacterForNormalChat)) {
+                const suggestionHistory = currentConvForSuggestions.messages.slice(-API_MESSAGE_HISTORY_COUNT).map(msg => ({
+                  role: msg.sender === 'user' ? 'user' : 'assistant',
+                  content: msg.text.replace(/\[感情:.+?\]/, '').trim()
+                }));
+
+                const suggestionSystemPrompt = `以下の会話履歴と最後のAIの返信に基づき、ユーザーが次に送信する可能性のある短い返信候補を3つ提案してください。各提案は簡潔にし、多様な選択肢を提供してください。思考プロセスや前置きは不要で、提案のみを以下のような箇条書きフォーマットで提示してください:\n- 提案1\n- 提案2\n- 提案3`;
+
+                const suggestionMessagesPayload = [
+                  { role: 'system', content: suggestionSystemPrompt },
+                  ...suggestionHistory,
+                ];
+                // Use a slightly higher temperature for more diverse suggestions, or a dedicated model if available.
+                const suggestionApiRequestBody: ChutesApiRequestBody = {
+                  model: model, // Or a faster/cheaper model for suggestions
+                  messages: suggestionMessagesPayload,
+                  temperature: Math.min(temperature + 0.2, 1.5), // Slightly higher temp
+                  top_p: topP,
+                  top_k: topK,
+                  useCensorship: useCensorship, // Keep censorship consistent or disable for suggestions
+                };
+                try {
+                  const suggestionResponse = await fetch('/api/chutes', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(suggestionApiRequestBody)
+                  });
+                  if (suggestionResponse.ok) {
+                    const suggestionData = await suggestionResponse.json();
+                    let rawSuggestions = suggestionData.reply || '';
+                    // Expecting suggestions in format: "- Suggestion 1\n- Suggestion 2\n- Suggestion 3"
+                    // Or just newline separated.
+                    const parsedReplies = rawSuggestions.split('\n')
+                                            .map((s: string) => s.replace(/^- /,'').trim()) // Remove "- " prefix
+                                            .filter((s: string) => s.length > 0 && s.length < 80) // Basic filter
+                                            .slice(0, 3); // Take up to 3
+                    setSuggestedReplies(parsedReplies.length > 0 ? parsedReplies : []);
+                  } else {
+                    console.error("Failed to fetch suggested replies:", await suggestionResponse.text());
+                    setSuggestedReplies([]);
+                  }
+                } catch (suggestionError) {
+                  console.error("Error fetching suggested replies:", suggestionError);
+                  setSuggestedReplies([]);
+                }
+              }
+            }
         }
     } catch (error) { // Catch all errors from the entire send process
         console.error('Overall sendMessage Error:', error);
+        setSuggestedReplies([]); // Clear suggestions on error
         // Determine context for error message if possible
         const errorSenderId = currentConversation?.isGroupChat ? 'system' : (currentCharacterForNormalChat?.id || 'system');
         const errorMessageText = currentConversation?.isGroupChat
@@ -795,6 +933,7 @@ export default function Home() {
     setDebateThemeInput('');
     setSelectedCharToCharMode('auto');
     setCharToCharModels([null, null]);
+    setSuggestedReplies([]);
     if (window.innerWidth < 1024) setSidebarOpen(false);
   }, [charToCharCandidates, characters, selectedCharToCharMode, debateThemeInput, charToCharModels, model]);
 
@@ -886,7 +1025,7 @@ export default function Home() {
           promptTextForSpeaker
         );
         const apiRequestBody: ChutesApiRequestBody = {
-          model: speakerModel, messages: apiPayloadMessages, temperature, useCensorship
+          model: speakerModel, messages: apiPayloadMessages, temperature, top_p: topP, top_k: topK, useCensorship
         };
 
         fetch('/api/chutes', {
@@ -1296,6 +1435,8 @@ export default function Home() {
         model,
         messages: messagesPayload,
         temperature,
+         top_p: topP,
+         top_k: topK,
         useCensorship
       };
 
@@ -1304,26 +1445,73 @@ export default function Home() {
           body: JSON.stringify(apiRequestBody)
       });
 
-      if (!response.ok) { const errorData = await response.text(); throw new Error(`HTTP error! status: ${response.status}, message: ${errorData}`); }
-      const data = await response.json();
-      let rawReply = data.reply || 'エラーが発生しました。応答がありません。';
-      let cleanedReply = cleanAIReply(rawReply);
-      // const emotion = extractEmotion(cleanedReply); // Emotion removed
-      const finalReplyText = cleanedReply.replace(/\[感情:.+?\]/, '').trim(); // Keep this to remove any residual emotion tags
+      if (!response.ok) {
+          const errorData = await response.text();
+          throw new Error(`HTTP error! status: ${response.status}, message: ${errorData}`);
+      }
 
-      const aiMessage: Message = {
-          id: `${Date.now()}-ai-continue`,
-          sender: currentCharacterForNormalChat.id,
-          text: finalReplyText, timestamp: new Date(), isRead: false
-      };
-      setConversations(prev => prev.map(conv =>
-          conv.id === currentConversationId ? { ...conv, messages: [...conv.messages, aiMessage] } : conv
-      ));
+      if (response.body && currentCharacterForNormalChat) {
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          let accumulatedText = "";
+          const aiMessageId = `${Date.now()}-ai-continue-streaming`;
+          setStreamingMessageId(aiMessageId);
+          setStreamingMessageText("");
+
+          const placeholderAiMessage: Message = {
+              id: aiMessageId,
+              sender: currentCharacterForNormalChat.id,
+              text: "生成中...",
+              timestamp: new Date(),
+              isRead: false,
+          };
+          setConversations(prev => prev.map(conv =>
+              conv.id === currentConversationId ? { ...conv, messages: [...conv.messages, placeholderAiMessage] } : conv
+          ));
+
+          while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              accumulatedText += decoder.decode(value, { stream: true });
+              setStreamingMessageText(cleanAIReply(accumulatedText));
+          }
+
+          const finalReplyText = cleanAIReply(accumulatedText);
+          setConversations(prev => prev.map(conv => {
+              if (conv.id === currentConversationId) {
+                  return {
+                      ...conv,
+                      messages: conv.messages.map(msg =>
+                          msg.id === aiMessageId ? { ...msg, text: finalReplyText, isRead: false } : msg
+                      )
+                  };
+              }
+              return conv;
+          }));
+          setStreamingMessageId(null);
+          setStreamingMessageText("");
+      } else if (currentCharacterForNormalChat) { // Fallback for non-streaming
+          const data = await response.json();
+          let rawReply = data.reply || 'エラーが発生しました。応答がありません。';
+          let cleanedReply = cleanAIReply(rawReply);
+          const finalReplyText = cleanedReply.replace(/\[感情:.+?\]/, '').trim();
+
+          const aiMessage: Message = {
+              id: `${Date.now()}-ai-continue`,
+              sender: currentCharacterForNormalChat.id,
+              text: finalReplyText, timestamp: new Date(), isRead: false
+          };
+          setConversations(prev => prev.map(conv =>
+              conv.id === currentConversationId ? { ...conv, messages: [...conv.messages, aiMessage] } : conv
+          ));
+      }
 
     } catch (error) {
         console.error('handleContinueConversation Error:', error);
+        setStreamingMessageId(null);
+        setStreamingMessageText("");
         const errorMessage: Message = {
-            id: `${Date.now()}-error-continue`, sender: currentCharacterForNormalChat.id,
+            id: `${Date.now()}-error-continue`, sender: currentCharacterForNormalChat?.id || 'system',
             text: '連続応答の生成中にエラーが発生しました。',
             timestamp: new Date() // Emotion removed
         };
@@ -1493,7 +1681,6 @@ export default function Home() {
                         onChange={(e) => setEditingMessageText(e.target.value)}
                         className={`w-full p-2 border rounded-md text-sm ${generalInputFieldBgColor} ${generalTextColor} ${generalBorderColor} focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 resize-none`}
                         rows={3}
-                        autoFocus
                     />
                     <div className="mt-2 flex justify-end space-x-2">
                         <button onClick={handleCancelEditMessage} className={`px-3 py-1 text-xs rounded-md border ${generalBorderColor} hover:bg-opacity-70 transition-colors ${generalTextColor} flex items-center`}>
@@ -1512,14 +1699,22 @@ export default function Home() {
                         className={`whitespace-pre-wrap ${messageTextColorClass} ${currentChatFontSize}`}
                         // Emotion-based text color styling removed, will be handled by allowAICustomTextColor and C() format.
                     >
-                        {renderFormattedText(msg.text, allowAICustomTextColor && !lineThemeActive)}
+                        {streamingMessageId === msg.id && streamingMessageText
+                            ? <>{renderFormattedText(streamingMessageText, allowAICustomTextColor && !lineThemeActive)}<span className="animate-pulse">▋</span></>
+                            : renderFormattedText(msg.text, allowAICustomTextColor && !lineThemeActive)}
                     </span>
                   }
-                  {!msg.text && msg.imageUrl && <span className={`${messageTextColorClass} italic text-xs`}>画像</span>}
+                  {/* Display placeholder if text is empty but streaming for this message */}
+                  {streamingMessageId === msg.id && !streamingMessageText && !msg.text &&
+                    <span className={`whitespace-pre-wrap ${messageTextColorClass} ${currentChatFontSize} opacity-70`}>
+                        生成中<span className="animate-pulse">...</span>
+                    </span>
+                  }
+                  {!msg.text && !streamingMessageId === msg.id && msg.imageUrl && <span className={`${messageTextColorClass} italic text-xs`}>画像</span>}
                 </div>
             )}
             {/* Continue Conversation Button for AI messages - new position and style */}
-            {!isCurrentlyEditingThisMessage && !messageSenderIsUser && !currentConversation?.isGroupChat && !currentConversation?.isCharToCharConversation && !isSending && currentConversation?.messages[currentConversation.messages.length - 1]?.id === msg.id && (
+            {!isCurrentlyEditingThisMessage && !messageSenderIsUser && !currentConversation?.isGroupChat && !currentConversation?.isCharToCharConversation && !isSending && currentConversation?.messages[currentConversation.messages.length - 1]?.id === msg.id && streamingMessageId !== msg.id && (
                 <div className={`mt-1 flex ${justifyContentClass === 'justify-end' ? 'justify-end' : 'justify-start'} w-full`}>
                     <button
                         onClick={() => handleContinueConversation()}
@@ -1589,11 +1784,11 @@ export default function Home() {
 
       <div className="flex flex-1 overflow-hidden">
         <div ref={sidebarRef} className={`
-            ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0
-            fixed lg:static inset-y-0 left-0 z-30 lg:w-80 w-[calc(100%-2rem)] sm:w-72
+            ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+            fixed inset-y-0 left-0 z-30 lg:w-80 w-[calc(100%-2rem)] sm:w-72
             transition-transform duration-300 ease-in-out
             ${sidebarActualPanelBgColor} border-r ${sidebarActualBorderColor}
-            overflow-hidden flex flex-col shadow-2xl lg:shadow-xl h-full
+            overflow-hidden flex flex-col shadow-2xl h-full
         `}>
           <div className={`p-4 border-b ${sidebarActualBorderColor} bg-gradient-to-br from-indigo-600 to-purple-700`}>
             <div className="flex justify-between items-center">
@@ -1602,12 +1797,19 @@ export default function Home() {
                 {sidebarOpen && (
                   <button
                     onClick={() => setSidebarOpen(false)}
-                    className={`p-2 rounded-full text-xl ${sidebarHeaderTextColor} hover:bg-white/20 lg:hidden transition-colors duration-200`}
+                    className={`p-2 rounded-full text-xl ${sidebarHeaderTextColor} hover:bg-white/20 transition-colors duration-200`}
                     title="サイドバーを閉じる"
                   >
                     <FaTimes />
                   </button>
                 )}
+                <button
+                  onClick={() => setShowAdvancedSettingsModal(true)}
+                  className={`p-2 rounded-full text-xl ${sidebarHeaderTextColor} hover:bg-white/20 transition-colors duration-200`}
+                  title="高度な設定"
+                >
+                  <FaCog />
+                </button>
                 <button onClick={() => setIsDarkMode(!isDarkMode)} className={`p-2 rounded-full text-xl ${isDarkMode ? 'bg-yellow-400 text-slate-900 hover:bg-yellow-300' : 'bg-slate-700 text-yellow-300 hover:bg-slate-600'} shadow-md transition-all duration-200`} title={isDarkMode ? "ライトモード" : "ダークモード"}> {isDarkMode ? '☀️' : '🌙'} </button>
               </div>
             </div>
@@ -1717,16 +1919,7 @@ export default function Home() {
               </select>
               {lineThemeActive && <p className={`text-xs mt-1.5 ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>LINE風テーマ有効時は青空/ダークスレート固定</p>}
             </div>
-            <div>
-                <div className="flex items-center mb-1.5">
-                    <label className={`block text-sm font-medium ${sidebarActualTextColor}`}>Temperature: {temperature.toFixed(1)}</label>
-                    <div className="relative ml-2 group">
-                        <FaQuestionCircle className={`cursor-help ${sidebarActualTextColor} opacity-60 hover:opacity-100 transition-opacity`} onMouseEnter={() => setShowTemperatureHelp(true)} onMouseLeave={() => setShowTemperatureHelp(false)} onClick={() => setShowTemperatureHelp(!showTemperatureHelp)} />
-                        {showTemperatureHelp && ( <div className={`absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-64 p-3 text-xs rounded-lg shadow-xl z-20 ${isDarkMode ? 'bg-slate-700 text-slate-200 border border-slate-600' : 'bg-slate-50 text-slate-700 border border-slate-300'}`}> AIの返答のランダム性を調整します。値が高いほど創造的で多様な返答になり、低いほど集中的で一貫性のある返答になります。 </div> )}
-                    </div>
-                </div>
-                <input type="range" min="0.1" max="1.5" step="0.1" value={temperature} onChange={(e) => setTemperature(parseFloat(e.target.value))} className={`w-full h-2 rounded-lg appearance-none cursor-pointer ${isDarkMode ? 'bg-slate-600 accent-indigo-500' : 'bg-slate-300 accent-indigo-500'}`} />
-            </div>
+            {/* Temperature setting removed from here, will be in Advanced Settings Modal */}
             <div className="flex items-center justify-between pt-1">
               <label className={`text-sm font-medium ${sidebarActualTextColor}`}>検閲を使用</label>
               <button onClick={() => setUseCensorship(!useCensorship)} className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all duration-150 shadow-sm ${useCensorship ? 'bg-red-500 hover:bg-red-600 text-white' : `${isDarkMode ? 'bg-slate-600 hover:bg-slate-500' : 'bg-slate-200 hover:bg-slate-300'} ${sidebarActualTextColor}`}`}> {useCensorship ? 'オン' : 'オフ'} </button>
@@ -1773,7 +1966,7 @@ export default function Home() {
         <div className="flex-1 flex flex-col overflow-hidden">
           <div className={`p-4 border-b flex items-center justify-between shadow-sm ${chatHeaderActualBgClass} ${lineThemeActive ? (isLineDark ? 'border-slate-700' : 'border-transparent') : generalBorderColor }`} style={chatHeaderActualBgStyle} >
             <div className="flex items-center min-w-0">
-                <button onClick={() => setSidebarOpen(!sidebarOpen)} className={`lg:hidden mr-3 p-2.5 rounded-md hover:${isDarkMode || (lineThemeActive && isLineDark)?'bg-slate-700/70':'bg-slate-200/70'} ${chatHeaderActualTextColor} transition-colors`} title="メニューを開閉"> <FaBars size={18} /> </button>
+                <button onClick={() => setSidebarOpen(!sidebarOpen)} className={`mr-3 p-2.5 rounded-md hover:${isDarkMode || (lineThemeActive && isLineDark)?'bg-slate-700/70':'bg-slate-200/70'} ${chatHeaderActualTextColor} transition-colors`} title="メニューを開閉"> <FaBars size={18} /> </button>
 
                 {currentConversation && currentConversation.isGroupChat && currentConversation.groupParticipantIds ? (
                     <>
@@ -1821,11 +2014,31 @@ export default function Home() {
             <div ref={messagesEndRef} />
             {!currentConversation && ( <div className={`text-center ${effectiveTextColor} opacity-50 mt-16 flex flex-col items-center`}> <FaRobot size={60} className="mx-auto mb-6 opacity-70"/> <p className="text-lg">会話を開始するか、既存の会話を選択してください。</p> </div> )}
           </div>
-            {currentConversation && !currentConversation.isCharToCharConversation && QUICK_MESSAGES.length > 0 && (
+          {/* Suggested Replies Section */}
+          {currentConversation && !currentConversation.isCharToCharConversation && suggestedReplies.length > 0 && (
             <div className={`px-4 pt-2.5 pb-2 border-t ${lineThemeActive ? (isLineDark ? 'border-slate-700' : 'border-transparent') : generalBorderColor} ${isDarkMode || (lineThemeActive && isLineDark)? 'bg-slate-700/80' : (lineThemeActive ? 'bg-sky-100/80' : 'bg-slate-100/80')} backdrop-blur-sm`}>
-                <div className="flex flex-wrap gap-2"> {QUICK_MESSAGES.slice(0,6).map(qm => ( <button key={qm.id} onClick={() => sendQuickMessage(qm.text)} className={`px-3.5 py-1.5 text-xs rounded-full shadow-sm ${ isDarkMode || (lineThemeActive && isLineDark) ? 'bg-slate-600 hover:bg-slate-500 active:bg-slate-400 text-slate-100' : (lineThemeActive ? 'bg-white hover:bg-slate-50 active:bg-slate-100 text-sky-700 border border-sky-300' : 'bg-white hover:bg-slate-200 active:bg-slate-300 text-slate-700 border border-slate-200') } transition-all duration-150 ease-in-out`}> {qm.text} </button> ))} </div>
+              <div className="flex flex-wrap gap-2">
+                {suggestedReplies.map((reply, index) => (
+                  <button
+                    key={index}
+                    onClick={() => {
+                      setInput(reply);
+                      setSuggestedReplies([]); // Clear suggestions after one is clicked
+                    }}
+                    className={`px-3.5 py-1.5 text-xs rounded-full shadow-sm ${
+                      isDarkMode || (lineThemeActive && isLineDark)
+                        ? 'bg-slate-600 hover:bg-slate-500 active:bg-slate-400 text-slate-100'
+                        : (lineThemeActive
+                            ? 'bg-white hover:bg-slate-50 active:bg-slate-100 text-sky-700 border border-sky-300'
+                            : 'bg-white hover:bg-slate-200 active:bg-slate-300 text-slate-700 border border-slate-200')
+                    } transition-all duration-150 ease-in-out`}
+                  >
+                    {reply}
+                  </button>
+                ))}
+              </div>
             </div>
-            )}
+          )}
           {((currentConversation && !currentConversation.isCharToCharConversation && !currentConversation.isGroupChat && currentCharacterForNormalChat) || (currentConversation && currentConversation.isGroupChat)) && (
             <div className={`p-3 border-t ${lineThemeActive ? (isLineDark ? 'border-slate-700' : 'border-sky-200') : generalBorderColor} ${inputBarContainerActualBg} shadow-top-sm`}>
               {imageToSend && (
@@ -2038,6 +2251,109 @@ export default function Home() {
             onCreateGroup={handleCreateGroupChat}
             isDarkMode={isDarkMode}
         />
+      )}
+
+      {showAdvancedSettingsModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className={`${generalPanelBgColor} ${generalTextColor} p-6 rounded-xl shadow-2xl w-[95vw] sm:max-w-md max-h-[90vh] overflow-y-auto custom-scrollbar`}>
+            <div className="flex justify-between items-center mb-5">
+              <h3 className="text-2xl font-semibold">高度な設定</h3>
+              <button
+                onClick={() => setShowAdvancedSettingsModal(false)}
+                className={`p-1.5 rounded-full hover:${isDarkMode?'bg-slate-700/70':'bg-slate-200/70'} transition-colors`}
+              >
+                <FaTimes size={22} />
+              </button>
+            </div>
+            <div className="space-y-6">
+              {/* Temperature Setting */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label htmlFor="temperature-slider" className={`block text-sm font-medium ${generalTextColor}`}>Temperature</label>
+                  <span className={`text-sm ${generalTextColor}`}>{temperature.toFixed(2)}</span>
+                </div>
+                <input
+                  id="temperature-slider"
+                  type="range"
+                  min="0.0"
+                  max="2.0" // Adjusted max for temperature as per common models
+                  step="0.01"
+                  value={temperature}
+                  onChange={(e) => setTemperature(parseFloat(e.target.value))}
+                  className={`w-full h-2 rounded-lg appearance-none cursor-pointer ${isDarkMode ? 'bg-slate-600 accent-indigo-500' : 'bg-slate-300 accent-indigo-500'}`}
+                />
+                <p className={`text-xs mt-1 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                  値が高いほど、よりランダムで創造的な応答になります。低いほど、より決定的で集中した応答になります。
+                </p>
+              </div>
+
+              {/* Top P Setting */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label htmlFor="top-p-slider" className={`block text-sm font-medium ${generalTextColor}`}>Top P</label>
+                  <span className={`text-sm ${generalTextColor}`}>{topP.toFixed(2)}</span>
+                </div>
+                <input
+                  id="top-p-slider"
+                  type="range"
+                  min="0.0"
+                  max="1.0"
+                  step="0.01"
+                  value={topP}
+                  onChange={(e) => setTopP(parseFloat(e.target.value))}
+                  className={`w-full h-2 rounded-lg appearance-none cursor-pointer ${isDarkMode ? 'bg-slate-600 accent-indigo-500' : 'bg-slate-300 accent-indigo-500'}`}
+                />
+                <p className={`text-xs mt-1 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                  核サンプリング。モデルは、確率の合計がこの値以上になる最小のトークンセットから選択します。0.0で無効。
+                </p>
+              </div>
+
+              {/* Top K Setting */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label htmlFor="top-k-slider" className={`block text-sm font-medium ${generalTextColor}`}>Top K</label>
+                  <span className={`text-sm ${generalTextColor}`}>{topK}</span>
+                </div>
+                <input
+                  id="top-k-slider"
+                  type="range"
+                  min="0" // 0 usually means disabled or default behavior in some APIs
+                  max="100" // Common practical upper limit for Top K
+                  step="1"
+                  value={topK}
+                  onChange={(e) => setTopK(parseInt(e.target.value, 10))}
+                  className={`w-full h-2 rounded-lg appearance-none cursor-pointer ${isDarkMode ? 'bg-slate-600 accent-indigo-500' : 'bg-slate-300 accent-indigo-500'}`}
+                />
+                <p className={`text-xs mt-1 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                  モデルは、次に選択するトークンを、確率が最も高いK個のトークンの中から選択します。0で無効。
+                </p>
+              </div>
+
+              {/* Future: Live stream toggle placeholder */}
+              {/*
+              <div className="flex items-center justify-between pt-2 border-t border-slate-200 dark:border-slate-700">
+                <label htmlFor="live-stream-toggle" className={`text-sm font-medium ${generalTextColor}`}>
+                  ライブストリーム生成 (試験的)
+                </label>
+                <button
+                  // onClick={() => setEnableLiveStream(!enableLiveStream)}
+                  className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all duration-150 shadow-sm `}
+                >
+                  オン / オフ
+                </button>
+              </div>
+              */}
+            </div>
+            <div className="mt-8 flex justify-end">
+              <button
+                onClick={() => setShowAdvancedSettingsModal(false)}
+                className={`px-6 py-2.5 rounded-lg border ${generalBorderColor} hover:${isDarkMode?'bg-slate-700/70':'bg-slate-100'} transition-colors duration-150 ${generalTextColor} font-medium shadow-sm`}
+              >
+                閉じる
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
        <style jsx global>{`
