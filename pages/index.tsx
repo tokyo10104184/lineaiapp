@@ -279,7 +279,7 @@ export default function Home() {
         };
         localStorage.setItem('chatAppData', JSON.stringify(data));
     }
--  }, [conversations, characters, currentConversationId, currentCharacterId, backgroundColor, isDarkMode, useCensorship, lineThemeActive, displayedQuote, isAutoReplying, chatFontSize, allowAICustomTextColor]);
+  }, [conversations, characters, currentConversationId, currentCharacterId, backgroundColor, isDarkMode, useCensorship, lineThemeActive, displayedQuote, isAutoReplying, chatFontSize, allowAICustomTextColor]);
 
   useEffect(() => {
     const sidebarElement = sidebarRef.current;
