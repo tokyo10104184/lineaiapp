@@ -1516,18 +1516,20 @@ export default function Home() {
                     </span>
                   }
                   {!msg.text && msg.imageUrl && <span className={`${messageTextColorClass} italic text-xs`}>画像</span>}
-
-                  {/* Continue Conversation Button for AI messages - inside the bubble */}
-                  {!isCurrentlyEditingThisMessage && !messageSenderIsUser && !currentConversation?.isGroupChat && !currentConversation?.isCharToCharConversation && !isSending && currentConversation?.messages[currentConversation.messages.length - 1]?.id === msg.id && (
+                </div>
+            )}
+            {/* Continue Conversation Button for AI messages - new position and style */}
+            {!isCurrentlyEditingThisMessage && !messageSenderIsUser && !currentConversation?.isGroupChat && !currentConversation?.isCharToCharConversation && !isSending && currentConversation?.messages[currentConversation.messages.length - 1]?.id === msg.id && (
+                <div className={`mt-1 flex ${justifyContentClass === 'justify-end' ? 'justify-end' : 'justify-start'} w-full`}>
                     <button
                         onClick={() => handleContinueConversation()}
                         disabled={isSending}
-                        className={`absolute bottom-1 right-1 p-1 rounded-full text-xs ${isDarkMode ? 'text-slate-400 hover:text-slate-200 bg-slate-700/50 hover:bg-slate-600/70' : 'text-slate-500 hover:text-slate-700 bg-slate-200/50 hover:bg-slate-300/70'} opacity-0 group-hover:opacity-100 focus:opacity-100 transition-all duration-150`}
+                        className={`flex items-center px-2 py-1 rounded-md text-xs ${isDarkMode ? 'text-slate-400 hover:text-slate-200 bg-slate-700/70 hover:bg-slate-600' : 'text-slate-500 hover:text-slate-700 bg-slate-200 hover:bg-slate-300'} transition-colors duration-150 opacity-70 hover:opacity-100`}
                         title="AIに返信を続けさせる"
                     >
-                        <FaPlay size={8} />
+                        <FaPlay size={10} className="mr-1" />
+                        <span>生成を続ける</span>
                     </button>
-                  )}
                 </div>
             )}
 
