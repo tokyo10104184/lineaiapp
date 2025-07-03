@@ -94,9 +94,9 @@ const DARK_MODE_CHAT_BACKGROUNDS = {
 // const EMOTION_EMOJIS = {
 //     '怒り': '😠', '悲しみ': '😢', '喜び': '😊', '驚き': '😲', '平静': '🙂'
 // };
-// const QUICK_MESSAGES = [
-//     { id: '1', text: 'こんにちは！' }, { id: '2', text: 'ありがとう！' }, { id: '3', text: 'いいね' }
-// ];
+const QUICK_MESSAGES = [
+    { id: '1', text: 'こんにちは！' }, { id: '2', text: 'ありがとう！' }, { id: '3', text: 'いいね' }
+];
 
 // --- Helper Functions ---
 const formatTime = (date: Date | string): string => {
@@ -126,6 +126,13 @@ const cleanAIReply = (reply: string): string => {
       /\[思考\][\s\S]*?\[\/思考\]/g,
   ];
   patternsToRemove.forEach(pattern => { cleanedReply = cleanedReply.replace(pattern, '').trim(); });
+
+  // Attempt to extract content if it looks like a {reply: "..."} structure
+  const replyMatch = cleanedReply.match(/^\{reply:\s*"([\s\S]*)"\s*\}$/);
+  if (replyMatch && replyMatch[1]) {
+    cleanedReply = replyMatch[1];
+  }
+
   return cleanedReply.trim();
 };
 
@@ -231,7 +238,7 @@ export default function Home() {
   const [characterDeleteMessage, setCharacterDeleteMessage] = useState(''); // Added state
   const [showGroupChatModal, setShowGroupChatModal] = useState(false);
   const [showAdvancedSettingsModal, setShowAdvancedSettingsModal] = useState(false);
-  const [suggestedReplies, setSuggestedReplies] = useState<string[]>([]);
+  // const [suggestedReplies, setSuggestedReplies] = useState<string[]>([]); // Removed for static quick messages
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
   const [streamingMessageText, setStreamingMessageText] = useState<string>('');
 
@@ -425,7 +432,7 @@ export default function Home() {
         setCurrentCharacterId(targetCharId);
     }
     setIsAutoReplying(false);
-    setSuggestedReplies([]);
+    // setSuggestedReplies([]); // Removed
     if (window.innerWidth < 1024) setSidebarOpen(false);
   }, [currentCharacterId, characters, conversations]);
 
@@ -455,7 +462,7 @@ export default function Home() {
     setCurrentCharacterId(''); // No single current character for group chat
     setShowGroupChatModal(false);
     setIsAutoReplying(false);
-    setSuggestedReplies([]);
+    // setSuggestedReplies([]); // Removed
     if (window.innerWidth < 1024) setSidebarOpen(false);
   }, [characters]);
 
@@ -492,7 +499,7 @@ export default function Home() {
         setCurrentCharacterId(selectedConv.characterId);
         setIsAutoReplying(false);
     }
-    setSuggestedReplies([]);
+    // setSuggestedReplies([]); // Removed
     if (window.innerWidth < 1024) setSidebarOpen(false);
   }, [conversations]);
 
@@ -535,7 +542,7 @@ export default function Home() {
 
   const switchToCharacter = useCallback((characterId: string) => {
     setCurrentCharacterId(characterId);
-    setSuggestedReplies([]);
+    // setSuggestedReplies([]); // Removed
     if (window.innerWidth < 1024) setSidebarOpen(false);
   }, []);
 
@@ -566,7 +573,7 @@ export default function Home() {
         return;
     }
 
-    setSuggestedReplies([]); // Clear previous suggestions
+    // setSuggestedReplies([]); // Removed: No longer using suggested replies
     setIsSending(true);
     let userMessageIdForReadUpdate = '';
 
@@ -793,59 +800,10 @@ export default function Home() {
                 ));
             }
 
-            // Fetch suggested replies - common for 1-on-1 and after all group messages
-            if (!editedMessageId) { // Only fetch suggestions for new messages, not edits
-              const currentConvForSuggestions = (await new Promise<Conversation[]>(resolve => setConversations(prev => { resolve(prev); return prev; }))).find(c => c.id === currentConversationId);
-              if (currentConvForSuggestions && (currentConvForSuggestions.isGroupChat || currentCharacterForNormalChat)) {
-                const suggestionHistory = currentConvForSuggestions.messages.slice(-API_MESSAGE_HISTORY_COUNT).map(msg => ({
-                  role: msg.sender === 'user' ? 'user' : 'assistant',
-                  content: msg.text.replace(/\[感情:.+?\]/, '').trim()
-                }));
-
-                const suggestionSystemPrompt = `以下の会話履歴と最後のAIの返信に基づき、ユーザーが次に送信する可能性のある短い返信候補を3つ提案してください。各提案は簡潔にし、多様な選択肢を提供してください。思考プロセスや前置きは不要で、提案のみを以下のような箇条書きフォーマットで提示してください:\n- 提案1\n- 提案2\n- 提案3`;
-
-                const suggestionMessagesPayload = [
-                  { role: 'system', content: suggestionSystemPrompt },
-                  ...suggestionHistory,
-                ];
-                // Use a slightly higher temperature for more diverse suggestions, or a dedicated model if available.
-                const suggestionApiRequestBody: ChutesApiRequestBody = {
-                  model: model, // Or a faster/cheaper model for suggestions
-                  messages: suggestionMessagesPayload,
-                  temperature: Math.min(temperature + 0.2, 1.5), // Slightly higher temp
-                  top_p: topP,
-                  top_k: topK,
-                  useCensorship: useCensorship, // Keep censorship consistent or disable for suggestions
-                };
-                try {
-                  const suggestionResponse = await fetch('/api/chutes', {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(suggestionApiRequestBody)
-                  });
-                  if (suggestionResponse.ok) {
-                    const suggestionData = await suggestionResponse.json();
-                    let rawSuggestions = suggestionData.reply || '';
-                    // Expecting suggestions in format: "- Suggestion 1\n- Suggestion 2\n- Suggestion 3"
-                    // Or just newline separated.
-                    const parsedReplies = rawSuggestions.split('\n')
-                                            .map((s: string) => s.replace(/^- /,'').trim()) // Remove "- " prefix
-                                            .filter((s: string) => s.length > 0 && s.length < 80) // Basic filter
-                                            .slice(0, 3); // Take up to 3
-                    setSuggestedReplies(parsedReplies.length > 0 ? parsedReplies : []);
-                  } else {
-                    console.error("Failed to fetch suggested replies:", await suggestionResponse.text());
-                    setSuggestedReplies([]);
-                  }
-                } catch (suggestionError) {
-                  console.error("Error fetching suggested replies:", suggestionError);
-                  setSuggestedReplies([]);
-                }
-              }
-            }
+            // Suggested replies logic removed
         }
     } catch (error) { // Catch all errors from the entire send process
         console.error('Overall sendMessage Error:', error);
-        setSuggestedReplies([]); // Clear suggestions on error
         // Determine context for error message if possible
         const errorSenderId = currentConversation?.isGroupChat ? 'system' : (currentCharacterForNormalChat?.id || 'system');
         const errorMessageText = currentConversation?.isGroupChat
@@ -933,7 +891,7 @@ export default function Home() {
     setDebateThemeInput('');
     setSelectedCharToCharMode('auto');
     setCharToCharModels([null, null]);
-    setSuggestedReplies([]);
+    // setSuggestedReplies([]); // Removed
     if (window.innerWidth < 1024) setSidebarOpen(false);
   }, [charToCharCandidates, characters, selectedCharToCharMode, debateThemeInput, charToCharModels, model]);
 
@@ -1963,7 +1921,7 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div className={`flex-1 flex flex-col overflow-hidden transition-all duration-300 ease-in-out ${sidebarOpen ? 'lg:ml-80' : 'ml-0'}`}>
           <div className={`p-4 border-b flex items-center justify-between shadow-sm ${chatHeaderActualBgClass} ${lineThemeActive ? (isLineDark ? 'border-slate-700' : 'border-transparent') : generalBorderColor }`} style={chatHeaderActualBgStyle} >
             <div className="flex items-center min-w-0">
                 <button onClick={() => setSidebarOpen(!sidebarOpen)} className={`mr-3 p-2.5 rounded-md hover:${isDarkMode || (lineThemeActive && isLineDark)?'bg-slate-700/70':'bg-slate-200/70'} ${chatHeaderActualTextColor} transition-colors`} title="メニューを開閉"> <FaBars size={18} /> </button>
@@ -2014,31 +1972,12 @@ export default function Home() {
             <div ref={messagesEndRef} />
             {!currentConversation && ( <div className={`text-center ${effectiveTextColor} opacity-50 mt-16 flex flex-col items-center`}> <FaRobot size={60} className="mx-auto mb-6 opacity-70"/> <p className="text-lg">会話を開始するか、既存の会話を選択してください。</p> </div> )}
           </div>
-          {/* Suggested Replies Section */}
-          {currentConversation && !currentConversation.isCharToCharConversation && suggestedReplies.length > 0 && (
+          {/* Quick Messages Section - Restored */}
+          {currentConversation && !currentConversation.isCharToCharConversation && QUICK_MESSAGES.length > 0 && (
             <div className={`px-4 pt-2.5 pb-2 border-t ${lineThemeActive ? (isLineDark ? 'border-slate-700' : 'border-transparent') : generalBorderColor} ${isDarkMode || (lineThemeActive && isLineDark)? 'bg-slate-700/80' : (lineThemeActive ? 'bg-sky-100/80' : 'bg-slate-100/80')} backdrop-blur-sm`}>
-              <div className="flex flex-wrap gap-2">
-                {suggestedReplies.map((reply, index) => (
-                  <button
-                    key={index}
-                    onClick={() => {
-                      setInput(reply);
-                      setSuggestedReplies([]); // Clear suggestions after one is clicked
-                    }}
-                    className={`px-3.5 py-1.5 text-xs rounded-full shadow-sm ${
-                      isDarkMode || (lineThemeActive && isLineDark)
-                        ? 'bg-slate-600 hover:bg-slate-500 active:bg-slate-400 text-slate-100'
-                        : (lineThemeActive
-                            ? 'bg-white hover:bg-slate-50 active:bg-slate-100 text-sky-700 border border-sky-300'
-                            : 'bg-white hover:bg-slate-200 active:bg-slate-300 text-slate-700 border border-slate-200')
-                    } transition-all duration-150 ease-in-out`}
-                  >
-                    {reply}
-                  </button>
-                ))}
-              </div>
+                <div className="flex flex-wrap gap-2"> {QUICK_MESSAGES.slice(0,6).map(qm => ( <button key={qm.id} onClick={() => sendQuickMessage(qm.text)} className={`px-3.5 py-1.5 text-xs rounded-full shadow-sm ${ isDarkMode || (lineThemeActive && isLineDark) ? 'bg-slate-600 hover:bg-slate-500 active:bg-slate-400 text-slate-100' : (lineThemeActive ? 'bg-white hover:bg-slate-50 active:bg-slate-100 text-sky-700 border border-sky-300' : 'bg-white hover:bg-slate-200 active:bg-slate-300 text-slate-700 border border-slate-200') } transition-all duration-150 ease-in-out`}> {qm.text} </button> ))} </div>
             </div>
-          )}
+            )}
           {((currentConversation && !currentConversation.isCharToCharConversation && !currentConversation.isGroupChat && currentCharacterForNormalChat) || (currentConversation && currentConversation.isGroupChat)) && (
             <div className={`p-3 border-t ${lineThemeActive ? (isLineDark ? 'border-slate-700' : 'border-sky-200') : generalBorderColor} ${inputBarContainerActualBg} shadow-top-sm`}>
               {imageToSend && (
