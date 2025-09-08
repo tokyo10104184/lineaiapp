@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import {
     FaUserCircle, FaImage, FaPlus, FaEdit, FaTimes, FaRobot, FaTrash, FaPaperPlane,
     FaBars, FaQuestionCircle, FaPaperclip, FaTimesCircle, FaQuoteLeft, FaComments,
-    FaPlay, FaStop, FaFistRaised, FaBalanceScale, FaCommentDots, FaSave, FaUndo, FaUsers
+    FaPlay, FaStop, FaFistRaised, FaBalanceScale, FaCommentDots, FaSave, FaUndo, FaUsers, FaHeart
 } from 'react-icons/fa';
 import ConfirmationDialog from '../components/ui/ConfirmationDialog'; // Added import
 import GroupChatCreationModal from '../components/GroupChatCreationModal';
@@ -75,16 +75,20 @@ const MODEL_OPTIONS = {
     'Llama 4 Scout': { value: 'chutesai/Llama-4-Scout-17B-16E-Instruct', description: 'バランス型のMeta製モデル', supportsImage: false } // Verified
 };
 const LIGHT_MODE_CHAT_BACKGROUNDS = {
-    'ペールグレー': '#f8fafc', 'ホワイト': '#ffffff', 'スカイブルー': '#e0f2fe', // This was the previous implicit color for LINE theme light
-    'ミントグリーン': '#d1fae5', 'ベビーピンク': '#fce7f3', 'ライトイエロー': '#fef9c3',
-    'ラベンダー': '#ede9fe', '青空': '#B0E0F6', // Changed from #87CEEB to a paler version
-    'コーラル': '#fff0f5', 'ライム': '#f0fff0',
+    'ベビーピンク': '#fce7f3',
+    'ラベンダーブリス': '#ede9fe',
+    'コーラルグロー': '#fff0f5',
+    'ピーチドリーム': '#ffedd5',
+    'スカイブルー': '#e0f2fe',
+    'ミントグリーン': '#d1fae5',
 };
 const DARK_MODE_CHAT_BACKGROUNDS = {
-    'ダークスレート': '#1e293b', 'ナイトブラック': '#0f172a', 'ミッドナイトブルー': '#312e81',
-    'フォレストグリーン': '#064e3b', 'ディープパープル': '#4c1d95', 'ダークローズ': '#831843',
-    'アッシュブラウン': '#3f3f46',
-    'インディゴナイト': '#283593', 'チャコール': '#36454F',
+    'ミッドナイトローズ': '#831843',
+    'ディープアメジスト': '#4c1d95',
+    'トワイライトパープル': '#5b21b6',
+    'インディゴナイト': '#312e81',
+    'ダークスレート': '#1e293b',
+    'ナイトブラック': '#0f172a',
 };
 // const EMOTION_COLORS = {
 //     '怒り': '#ef4444', '悲しみ': '#06b6d4', '喜び': '#eab308', '驚き': '#f97316', '平静': '#6b7280'
@@ -257,11 +261,11 @@ export default function Home() {
     }
 
     if (initialCharacters.length === 0) {
-      const nyanpupuuSystemPrompt = generateSystemPrompt('にゃんぷっぷー', 'フレンドリーで親しみやすい猫のような性格');
+      const girlfriendSystemPrompt = generateSystemPrompt('結衣', 'あなたのことが大好きな、優しくてちょっと甘えん坊な彼女。いつでもあなたの味方だよ。');
       const defaultChar: Character = {
-        id: 'char-1', name: 'にゃんぷっぷー', description: 'フレンドリーで親しみやすい猫のような性格',
-        systemPrompt: nyanpupuuSystemPrompt,
-        color: '#818cf8', activeHours: { start: 0, end: 23 }, useActiveHours: false, icon: '🐱', isPublic: true
+        id: 'char-1', name: '結衣', description: 'あなたのことが大好きな、優しくてちょっと甘えん坊な彼女。',
+        systemPrompt: girlfriendSystemPrompt,
+        color: '#f472b6', activeHours: { start: 0, end: 23 }, useActiveHours: false, icon: '👩', isPublic: true
       };
       setCharacters(prevChars => (prevChars.length === 0 ? [defaultChar] : prevChars));
       setCurrentCharacterId(prevId => (prevId === '' && defaultChar.id ? defaultChar.id : prevId));
@@ -1072,11 +1076,15 @@ export default function Home() {
   const sidebarActualPanelBgColor = generalPanelBgColor;
   const sidebarActualBorderColor = generalBorderColor;
   const sidebarHeaderTextColor = useMemo(() => 'text-white', []);
-  const chatMessagesListActualBg = useMemo(() => (
-    lineThemeActive
-      ? (isLineDark ? DARK_MODE_CHAT_BACKGROUNDS['ダークスレート'] : LIGHT_MODE_CHAT_BACKGROUNDS['青空'])
-      : (activeChatBackgroundPalette[backgroundColor as keyof typeof activeChatBackgroundPalette] || (isDarkMode ? DARK_MODE_CHAT_BACKGROUNDS['ダークスレート'] : LIGHT_MODE_CHAT_BACKGROUNDS['ペールグレー']))
-  ), [lineThemeActive, isLineDark, activeChatBackgroundPalette, backgroundColor, isDarkMode]);
+  const chatMessagesListActualBg = useMemo(() => {
+    if (lineThemeActive) {
+      return isLineDark ? DARK_MODE_CHAT_BACKGROUNDS['ダークスレート'] : LIGHT_MODE_CHAT_BACKGROUNDS['スカイブルー'];
+    }
+    // Return a gradient for the default theme
+    return isDarkMode
+      ? 'linear-gradient(135deg, #261132 0%, #0f172a 100%)'
+      : 'linear-gradient(135deg, #fbcfe8 0%, #f5d0fe 100%)';
+  }, [lineThemeActive, isLineDark, isDarkMode]);
   const chatHeaderActualBgClass = useMemo(() => (
       lineThemeActive ? '' : (isDarkMode ? 'bg-slate-800' : 'bg-white')
   ), [lineThemeActive, isDarkMode]);
@@ -1578,7 +1586,7 @@ export default function Home() {
   return (
     <div className="h-screen flex flex-col selection:bg-indigo-500 selection:text-white antialiased" style={{ backgroundColor: rootPageActualBg }}>
       <Head>
-        <title>メッセンジャーAI</title>
+        <title>AIカノジョ</title>
         <meta name="description" content="AIとチャットできるアプリケーション" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
         <link rel="icon" href="/favicon.ico" />
@@ -1595,9 +1603,9 @@ export default function Home() {
             ${sidebarActualPanelBgColor} border-r ${sidebarActualBorderColor}
             overflow-hidden flex flex-col shadow-2xl lg:shadow-xl h-full
         `}>
-          <div className={`p-4 border-b ${sidebarActualBorderColor} bg-gradient-to-br from-indigo-600 to-purple-700`}>
+          <div className={`p-4 border-b ${sidebarActualBorderColor} bg-gradient-to-br from-pink-500 to-rose-500`}>
             <div className="flex justify-between items-center">
-              <h1 className={`font-semibold text-xl flex items-center ${sidebarHeaderTextColor}`}> <FaRobot className="mr-2.5 text-2xl" /> メッセンジャーAI </h1>
+              <h1 className={`font-semibold text-xl flex items-center ${sidebarHeaderTextColor}`}> <FaHeart className="mr-2.5 text-2xl" /> AIカノジョ </h1>
               <div className="flex items-center space-x-2">
                 {sidebarOpen && (
                   <button
@@ -1624,6 +1632,7 @@ export default function Home() {
                     title={currentCharacterId ? "新しい会話 (選択中キャラと)" : "キャラクターを選択してください"}>
                     <FaPlus size={14} />
                 </button>
+                {/*
                 <button
                     onClick={() => { setCharToCharCandidates([null, null]); setSelectedCharToCharMode('auto'); setDebateThemeInput(''); setCharToCharModels([null,null]); setShowCharToCharSelectModal(true);}}
                     disabled={characters.length < 2}
@@ -1638,6 +1647,7 @@ export default function Home() {
                     title="グループチャット作成">
                     <FaUsers size={14} />
                 </button>
+                */}
               </div>
             </div>
             <div className="space-y-1.5 max-h-40 md:max-h-52 lg:max-h-40 overflow-y-auto pr-1 custom-scrollbar">
@@ -1816,10 +1826,10 @@ export default function Home() {
                 </button>
             )}
           </div>
-           <div ref={chatMessagesContainerRef} className={`flex-1 overflow-y-auto space-y-1 scroll-smooth custom-scrollbar ${lineThemeActive ? 'p-4' : 'p-2 sm:p-4'}`} style={{ backgroundColor: chatMessagesListActualBg }}>
+           <div ref={chatMessagesContainerRef} className={`flex-1 overflow-y-auto space-y-1 scroll-smooth custom-scrollbar ${lineThemeActive ? 'p-4' : 'p-2 sm:p-4'}`} style={{ background: chatMessagesListActualBg }}>
             {currentConversation && currentConversation.messages.map((msg) => ( <MessageItem key={msg.id} msg={msg} currentChatFontSize={chatFontSize} /> ))}
             <div ref={messagesEndRef} />
-            {!currentConversation && ( <div className={`text-center ${effectiveTextColor} opacity-50 mt-16 flex flex-col items-center`}> <FaRobot size={60} className="mx-auto mb-6 opacity-70"/> <p className="text-lg">会話を開始するか、既存の会話を選択してください。</p> </div> )}
+            {!currentConversation && ( <div className={`text-center ${effectiveTextColor} opacity-50 mt-16 flex flex-col items-center`}> <FaHeart size={60} className="mx-auto mb-6 opacity-70"/> <p className="text-lg">さあ、会話を始めよう</p> </div> )}
           </div>
             {currentConversation && !currentConversation.isCharToCharConversation && QUICK_MESSAGES.length > 0 && (
             <div className={`px-4 pt-2.5 pb-2 border-t ${lineThemeActive ? (isLineDark ? 'border-slate-700' : 'border-transparent') : generalBorderColor} ${isDarkMode || (lineThemeActive && isLineDark)? 'bg-slate-700/80' : (lineThemeActive ? 'bg-sky-100/80' : 'bg-slate-100/80')} backdrop-blur-sm`}>
