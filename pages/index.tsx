@@ -161,7 +161,7 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    let initialCharacters: Character[] = [];
+    let loadedCharacters: Character[] = [];
     try {
       const savedData = localStorage.getItem('chatAppData');
       if (savedData) {
@@ -183,46 +183,48 @@ export default function Home() {
           groupParticipantIds: conv.groupParticipantIds || [],
         }));
         setConversations(loadedConversations);
-        initialCharacters = (data.characters || []).map((char: Character) => ({
-          ...char,
-          gauges: char.gauges || { intimacy: 50, trust: 50, mood: 50, dependence: 20, excitement: 50, jealousy: 30, curiosity: 70, comfort: 50, pleasure: 30 }
-        }));
-        setCharacters(initialCharacters);
+
+        if (data.characters && data.characters.length > 0) {
+          loadedCharacters = (data.characters || []).map((char: Character) => ({
+            ...char,
+            gauges: char.gauges || { intimacy: 50, trust: 50, mood: 50, dependence: 20, excitement: 50, jealousy: 30, curiosity: 70, comfort: 50, pleasure: 30 }
+          }));
+        }
+
         setCurrentConversationId(data.currentConversationId || '');
         setCurrentCharacterId(data.currentCharacterId || '');
         setBackgroundColor(data.backgroundColor || (data.isDarkMode ? Object.keys(DARK_MODE_CHAT_BACKGROUNDS)[0] : Object.keys(LIGHT_MODE_CHAT_BACKGROUNDS)[0]));
         setIsDarkMode(data.isDarkMode || false);
         setUseCensorship(data.useCensorship || false);
         setLineThemeActive(data.lineThemeActive || false);
-         // setShowEmotionIcons(data.showEmotionIcons === undefined ? true : data.showEmotionIcons); // Removed
         setDisplayedQuote(data.displayedQuote || null);
         setIsAutoReplying(data.isAutoReplying || false);
-        setChatFontSize(data.chatFontSize || 'text-sm'); // Load chat font size
+        setChatFontSize(data.chatFontSize || 'text-sm');
         setAllowAICustomTextColor(data.allowAICustomTextColor === undefined ? true : data.allowAICustomTextColor);
         setShowGauges(data.showGauges === undefined ? true : data.showGauges);
       } else {
+        // Set default settings for a fresh start
         setBackgroundColor(Object.keys(LIGHT_MODE_CHAT_BACKGROUNDS)[0]);
-        setChatFontSize('text-sm'); // Default if no saved data
-        setAllowAICustomTextColor(true); // Default true
+        setChatFontSize('text-sm');
+        setAllowAICustomTextColor(true);
         setShowGauges(true);
       }
     } catch (error) {
       console.error("Failed to load or parse data from localStorage:", error);
+      // Reset to a clean state on error
       setConversations([]);
-      initialCharacters = [];
-      setCharacters([]);
+      loadedCharacters = [];
       setCurrentConversationId('');
       setCurrentCharacterId('');
       setBackgroundColor(Object.keys(LIGHT_MODE_CHAT_BACKGROUNDS)[0]);
       setIsDarkMode(false);
       setUseCensorship(false);
       setLineThemeActive(false);
-      // setShowEmotionIcons(true); // Removed
       setDisplayedQuote(null);
       setIsAutoReplying(false);
     }
 
-    if (initialCharacters.length === 0) {
+    if (loadedCharacters.length === 0) {
       const defaultGirlfriends: Character[] = [
         {
           id: 'gf-1-yuki',
@@ -274,7 +276,8 @@ export default function Home() {
         },
       ];
       setCharacters(defaultGirlfriends);
-      // Do not set currentCharacterId here, let the user choose.
+    } else {
+      setCharacters(loadedCharacters);
     }
   }, [generateSystemPrompt]);
 
