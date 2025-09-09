@@ -7,66 +7,11 @@ import {
 } from 'react-icons/fa';
 import ConfirmationDialog from '../components/ui/ConfirmationDialog'; // Added import
 import GroupChatCreationModal from '../components/GroupChatCreationModal';
+import CharacterSelectionModal from '../components/CharacterSelectionModal';
+import SettingsModal from '../components/SettingsModal';
+import GaugesModal from '../components/GaugesModal';
 import { FORMATTING_INSTRUCTIONS_PROMPT } from '../lib/prompts';
-
-// --- Interfaces ---
-interface Message {
-  id: string;
-  sender: 'user' | string
-  text: string
-  timestamp: Date
-  isRead?: boolean
-  imageUrl?: string
-  isEditing?: boolean;
-  originalText?: string;
-}
-
-interface EmotionGauges {
-  intimacy: number;
-  trust: number;
-  mood: number;
-  dependence: number;
-  excitement: number;
-  jealousy: number;
-  curiosity: number;
-  comfort: number;
-  pleasure: number;
-}
-
-interface Character {
-  id: string
-  name: string
-  description: string
-  systemPrompt: string
-  color: string
-  activeHours: { start: number; end: number }
-  useActiveHours: boolean
-  icon: string
-  isPublic: boolean
-  gauges: EmotionGauges;
-}
-
-interface Conversation {
-  id: string
-  title: string
-  messages: Message[]
-  characterId: string
-  isCharToCharConversation?: boolean
-  participantCharacterIds?: [string, string]
-  charToCharMode?: 'auto' | 'battle' | 'debate';
-  debateTheme?: string;
-  participantModels?: [string, string];
-  isGroupChat?: boolean;
-  groupParticipantIds?: string[];
-}
-
-interface ChutesApiRequestBody {
-  model: string;
-  messages: Array<{ role: string; content: string }>;
-  temperature: number;
-  useCensorship: boolean;
-  imageDataUrl?: string;
-}
+import { Message, Character, Conversation, ChutesApiRequestBody } from '../lib/types';
 
 // --- Constants ---
 const SWIPE_THRESHOLD = 50;
@@ -187,6 +132,10 @@ export default function Home() {
   const [characterToDeleteId, setCharacterToDeleteId] = useState<string | null>(null); // Added state
   const [characterDeleteMessage, setCharacterDeleteMessage] = useState(''); // Added state
   const [showGroupChatModal, setShowGroupChatModal] = useState(false);
+  const [showCharacterSelection, setShowCharacterSelection] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showGaugesModal, setShowGaugesModal] = useState(false);
+  const [showGauges, setShowGauges] = useState(true);
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const chatMessagesContainerRef = useRef<HTMLDivElement>(null)
@@ -250,10 +199,12 @@ export default function Home() {
         setIsAutoReplying(data.isAutoReplying || false);
         setChatFontSize(data.chatFontSize || 'text-sm'); // Load chat font size
         setAllowAICustomTextColor(data.allowAICustomTextColor === undefined ? true : data.allowAICustomTextColor);
+        setShowGauges(data.showGauges === undefined ? true : data.showGauges);
       } else {
         setBackgroundColor(Object.keys(LIGHT_MODE_CHAT_BACKGROUNDS)[0]);
         setChatFontSize('text-sm'); // Default if no saved data
         setAllowAICustomTextColor(true); // Default true
+        setShowGauges(true);
       }
     } catch (error) {
       console.error("Failed to load or parse data from localStorage:", error);
@@ -334,11 +285,12 @@ export default function Home() {
           backgroundColor, isDarkMode, useCensorship,
            lineThemeActive, displayedQuote, isAutoReplying, // showEmotionIcons removed
           chatFontSize, // Save chat font size
-           allowAICustomTextColor // Save new setting
+           allowAICustomTextColor, // Save new setting
+           showGauges,
         };
         localStorage.setItem('chatAppData', JSON.stringify(data));
     }
-  }, [conversations, characters, currentConversationId, currentCharacterId, backgroundColor, isDarkMode, useCensorship, lineThemeActive, displayedQuote, isAutoReplying, chatFontSize, allowAICustomTextColor]);
+  }, [conversations, characters, currentConversationId, currentCharacterId, backgroundColor, isDarkMode, useCensorship, lineThemeActive, displayedQuote, isAutoReplying, chatFontSize, allowAICustomTextColor, showGauges]);
 
   useEffect(() => {
     const sidebarElement = sidebarRef.current;
@@ -1652,6 +1604,56 @@ export default function Home() {
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet" />
       </Head>
 
+      {showCharacterSelection && (
+        <CharacterSelectionModal
+          isOpen={showCharacterSelection}
+          onClose={() => setShowCharacterSelection(false)}
+          characters={characters}
+          onSelectCharacter={(charId) => {
+            setCurrentCharacterId(charId);
+            createNewConversation(charId);
+            setShowCharacterSelection(false);
+          }}
+          onCreateNew={() => {
+            setShowCharacterSelection(false);
+            setShowCharacterDialog(true);
+          }}
+          isDarkMode={isDarkMode}
+        />
+      )}
+
+      <SettingsModal
+        isOpen={showSettingsModal}
+        onClose={() => setShowSettingsModal(false)}
+        isDarkMode={isDarkMode}
+        model={model}
+        setModel={setModel}
+        temperature={temperature}
+        setTemperature={setTemperature}
+        useCensorship={useCensorship}
+        setUseCensorship={setUseCensorship}
+        lineThemeActive={lineThemeActive}
+        setLineThemeActive={setLineThemeActive}
+        allowAICustomTextColor={allowAICustomTextColor}
+        setAllowAICustomTextColor={setAllowAICustomTextColor}
+        chatFontSize={chatFontSize}
+        setChatFontSize={setChatFontSize}
+        backgroundColor={backgroundColor}
+        setBackgroundColor={setBackgroundColor}
+        lightModeBackgrounds={LIGHT_MODE_CHAT_BACKGROUNDS}
+        darkModeBackgrounds={DARK_MODE_CHAT_BACKGROUNDS}
+        modelOptions={MODEL_OPTIONS}
+        showGauges={showGauges}
+        setShowGauges={setShowGauges}
+      />
+
+      <GaugesModal
+        isOpen={showGaugesModal}
+        onClose={() => setShowGaugesModal(false)}
+        character={currentCharacterForNormalChat}
+        isDarkMode={isDarkMode}
+      />
+
       <div className="flex flex-1 overflow-hidden">
         <div ref={sidebarRef} className={`
             ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0
@@ -1664,6 +1666,9 @@ export default function Home() {
             <div className="flex justify-between items-center">
               <h1 className={`font-semibold text-xl flex items-center ${sidebarHeaderTextColor}`}> <FaRobot className="mr-2.5 text-2xl" /> Kint </h1>
               <div className="flex items-center space-x-2">
+                <button onClick={() => setShowSettingsModal(true)} className={`p-2 rounded-full text-xl ${sidebarHeaderTextColor} hover:bg-white/20 transition-colors duration-200`}>
+                  <FaCog />
+                </button>
                 {sidebarOpen && (
                   <button
                     onClick={() => setSidebarOpen(false)}
@@ -1764,65 +1769,7 @@ export default function Home() {
           </div>
 
           <div className={`flex-1 p-4 space-y-4 overflow-y-auto ${sidebarActualPanelBgColor} pr-1 custom-scrollbar`}>
-            <div>
-              <label className={`block text-sm font-medium mb-1.5 ${sidebarActualTextColor}`}>AIモデル</label>
-              <select className={`w-full px-3 py-2.5 border rounded-lg text-sm shadow-sm ${generalInputFieldBgColor} ${sidebarActualTextColor} ${sidebarActualBorderColor} focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors`} value={model} onChange={(e) => setModel(e.target.value)}>
-                {Object.entries(MODEL_OPTIONS).map(([label, info]) => ( <option key={info.value} value={info.value}> {label} </option> ))}
-              </select>
-              <div className={`text-xs mt-1.5 ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}> {Object.entries(MODEL_OPTIONS).find(([_, info]) => info.value === model)?.[1]?.description} </div>
-            </div>
-            <div>
-              <label className={`block text-sm font-medium mb-1.5 ${sidebarActualTextColor}`}>チャット背景色</label>
-              <select
-                className={`w-full px-3 py-2.5 border rounded-lg text-sm shadow-sm ${generalInputFieldBgColor} ${sidebarActualTextColor} ${sidebarActualBorderColor} focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors ${lineThemeActive ? 'opacity-50 cursor-not-allowed' : ''}`}
-                value={backgroundColor}
-                onChange={(e) => setBackgroundColor(e.target.value)}
-                disabled={lineThemeActive} >
-                {Object.keys(activeChatBackgroundPalette).map((colorName) => ( <option key={colorName} value={colorName}> {colorName} </option> ))}
-              </select>
-              {lineThemeActive && <p className={`text-xs mt-1.5 ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>LINE風テーマ有効時は青空/ダークスレート固定</p>}
-            </div>
-            <div>
-                <div className="flex items-center mb-1.5">
-                    <label className={`block text-sm font-medium ${sidebarActualTextColor}`}>Temperature: {temperature.toFixed(1)}</label>
-                    <div className="relative ml-2 group">
-                        <FaQuestionCircle className={`cursor-help ${sidebarActualTextColor} opacity-60 hover:opacity-100 transition-opacity`} onMouseEnter={() => setShowTemperatureHelp(true)} onMouseLeave={() => setShowTemperatureHelp(false)} onClick={() => setShowTemperatureHelp(!showTemperatureHelp)} />
-                        {showTemperatureHelp && ( <div className={`absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-64 p-3 text-xs rounded-lg shadow-xl z-20 ${isDarkMode ? 'bg-slate-700 text-slate-200 border border-slate-600' : 'bg-slate-50 text-slate-700 border border-slate-300'}`}> AIの返答のランダム性を調整します。値が高いほど創造的で多様な返答になり、低いほど集中的で一貫性のある返答になります。 </div> )}
-                    </div>
-                </div>
-                <input type="range" min="0.1" max="1.5" step="0.1" value={temperature} onChange={(e) => setTemperature(parseFloat(e.target.value))} className={`w-full h-2 rounded-lg appearance-none cursor-pointer ${isDarkMode ? 'bg-slate-600 accent-indigo-500' : 'bg-slate-300 accent-indigo-500'}`} />
-            </div>
-            <div className="flex items-center justify-between pt-1">
-              <label className={`text-sm font-medium ${sidebarActualTextColor}`}>検閲を使用</label>
-              <button onClick={() => setUseCensorship(!useCensorship)} className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all duration-150 shadow-sm ${useCensorship ? 'bg-red-500 hover:bg-red-600 text-white' : `${isDarkMode ? 'bg-slate-600 hover:bg-slate-500' : 'bg-slate-200 hover:bg-slate-300'} ${sidebarActualTextColor}`}`}> {useCensorship ? 'オン' : 'オフ'} </button>
-            </div>
-            {/* <div className="flex items-center justify-between">
-              <label className={`text-sm font-medium ${sidebarActualTextColor}`}>感情アイコン表示</label>
-              <button onClick={() => setShowEmotionIcons(!showEmotionIcons)} className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all duration-150 shadow-sm ${showEmotionIcons ? 'bg-indigo-500 hover:bg-indigo-600 text-white' : `${isDarkMode ? 'bg-slate-600 hover:bg-slate-500' : 'bg-slate-200 hover:bg-slate-300'} ${sidebarActualTextColor}`}`}> {showEmotionIcons ? 'オン' : 'オフ'} </button>
-            </div> */}
-            <div className="flex items-center justify-between">
-              <label className={`text-sm font-medium ${sidebarActualTextColor}`}>LINE風テーマ</label>
-              <button onClick={() => setLineThemeActive(!lineThemeActive)} className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all duration-150 shadow-sm ${lineThemeActive ? 'bg-green-500 hover:bg-green-600 text-white' : `${isDarkMode ? 'bg-slate-600 hover:bg-slate-500' : 'bg-slate-200 hover:bg-slate-300'} ${sidebarActualTextColor}`}`}> {lineThemeActive ? 'オン' : 'オフ'} </button>
-            </div>
-            <div className="flex items-center justify-between">
-              <label className={`text-sm font-medium ${sidebarActualTextColor}`}>AIによる文字色指定を許可</label>
-              <button onClick={() => setAllowAICustomTextColor(!allowAICustomTextColor)} className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all duration-150 shadow-sm ${allowAICustomTextColor ? 'bg-teal-500 hover:bg-teal-600 text-white' : `${isDarkMode ? 'bg-slate-600 hover:bg-slate-500' : 'bg-slate-200 hover:bg-slate-300'} ${sidebarActualTextColor}`}`}> {allowAICustomTextColor ? 'オン' : 'オフ'} </button>
-            </div>
-
-            <div>
-              <label className={`block text-sm font-medium mb-1.5 ${sidebarActualTextColor}`}>チャットフォントサイズ</label>
-              <select
-                className={`w-full px-3 py-2.5 border rounded-lg text-sm shadow-sm ${generalInputFieldBgColor} ${sidebarActualTextColor} ${sidebarActualBorderColor} focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors`}
-                value={chatFontSize}
-                onChange={(e) => setChatFontSize(e.target.value)}
-              >
-                <option value="text-xs">極小</option>
-                <option value="text-sm">小</option>
-                <option value="text-base">標準</option>
-                <option value="text-lg">大</option>
-              </select>
-            </div>
-
+            {/* Settings moved to modal */}
             <div className={`pt-2 border-t ${generalBorderColor} mt-3`}>
                 <button onClick={showRandomQuote} className={`w-full flex items-center justify-center px-4 py-2.5 rounded-lg transition-colors duration-150 ${generalTextColor} ${isDarkMode ? 'bg-slate-700 hover:bg-slate-600 active:bg-slate-500' : 'bg-slate-100 hover:bg-slate-200 active:bg-slate-300'} font-medium shadow-sm`}> <FaQuoteLeft className="mr-2" /> 今日の名言 </button>
                 {displayedQuote && (
@@ -1875,16 +1822,34 @@ export default function Home() {
                     </>
                 ) : (<h2 className={`text-lg font-semibold ${chatHeaderActualTextColor}`}>キャラクターを選択してください</h2>)}
             </div>
-            {currentConversation?.isCharToCharConversation && (
-                <button onClick={toggleAutoReply} className={`p-2.5 rounded-md ${isAutoReplying ? (lineThemeActive && !isLineDark ? 'bg-red-200 text-red-700 hover:bg-red-300' : 'bg-red-500/20 text-red-400 hover:bg-red-500/30') : (lineThemeActive && !isLineDark ? 'bg-green-200 text-green-700 hover:bg-green-300' : 'bg-green-500/20 text-green-400 hover:bg-green-500/30')} transition-colors`} title={isAutoReplying ? "自動会話を停止" : "自動会話を開始/再開"}>
-                    {isAutoReplying ? <FaStop size={18} /> : <FaPlay size={18} />}
+            <div className="flex items-center space-x-2">
+              {currentCharacterForNormalChat && showGauges && (
+                <button onClick={() => setShowGaugesModal(true)} className={`p-2.5 rounded-md hover:${isDarkMode || (lineThemeActive && isLineDark)?'bg-slate-700/70':'bg-slate-200/70'} ${chatHeaderActualTextColor} transition-colors`} title="感情ゲージ">
+                  <FaChartBar size={18} />
                 </button>
-            )}
+              )}
+              {currentConversation?.isCharToCharConversation && (
+                  <button onClick={toggleAutoReply} className={`p-2.5 rounded-md ${isAutoReplying ? (lineThemeActive && !isLineDark ? 'bg-red-200 text-red-700 hover:bg-red-300' : 'bg-red-500/20 text-red-400 hover:bg-red-500/30') : (lineThemeActive && !isLineDark ? 'bg-green-200 text-green-700 hover:bg-green-300' : 'bg-green-500/20 text-green-400 hover:bg-green-500/30')} transition-colors`} title={isAutoReplying ? "自動会話を停止" : "自動会話を開始/再開"}>
+                      {isAutoReplying ? <FaStop size={18} /> : <FaPlay size={18} />}
+                  </button>
+              )}
+            </div>
           </div>
            <div ref={chatMessagesContainerRef} className={`flex-1 overflow-y-auto space-y-1 scroll-smooth custom-scrollbar ${lineThemeActive ? 'p-4' : 'p-2 sm:p-4'}`} style={{ backgroundColor: chatMessagesListActualBg }}>
             {currentConversation && currentConversation.messages.map((msg) => ( <MessageItem key={msg.id} msg={msg} currentChatFontSize={chatFontSize} /> ))}
             <div ref={messagesEndRef} />
-            {!currentConversation && ( <div className={`text-center ${effectiveTextColor} opacity-50 mt-16 flex flex-col items-center`}> <FaRobot size={60} className="mx-auto mb-6 opacity-70"/> <p className="text-lg">会話を開始するか、既存の会話を選択してください。</p> </div> )}
+            {!currentConversation && (
+              <div className="flex flex-col items-center justify-center h-full text-center">
+                <h2 className={`text-2xl font-bold mb-4 ${generalTextColor}`}>Kintへようこそ</h2>
+                <p className={`mb-8 ${generalTextColor}`}>始めるには、下のボタンを押してください。</p>
+                <button
+                  onClick={() => setShowCharacterSelection(true)}
+                  className="px-8 py-4 bg-pink-500 text-white font-bold rounded-lg shadow-lg hover:bg-pink-600 transition-colors"
+                >
+                  始める
+                </button>
+              </div>
+            )}
           </div>
             {currentConversation && !currentConversation.isCharToCharConversation && QUICK_MESSAGES.length > 0 && (
             <div className={`px-4 pt-2.5 pb-2 border-t ${lineThemeActive ? (isLineDark ? 'border-slate-700' : 'border-transparent') : generalBorderColor} ${isDarkMode || (lineThemeActive && isLineDark)? 'bg-slate-700/80' : (lineThemeActive ? 'bg-sky-100/80' : 'bg-slate-100/80')} backdrop-blur-sm`}>
