@@ -32,6 +32,7 @@ export interface Character {
   icon: string
   isPublic: boolean
   gauges: EmotionGauges;
+  useGauges: boolean;
 }
 
 export interface Conversation {

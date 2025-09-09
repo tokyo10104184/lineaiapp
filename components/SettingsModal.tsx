@@ -22,8 +22,8 @@ interface SettingsModalProps {
   lightModeBackgrounds: any;
   darkModeBackgrounds: any;
   modelOptions: any;
-  showGauges: boolean;
-  setShowGauges: (value: boolean) => void;
+  cheatMode: boolean;
+  setCheatMode: (value: boolean) => void;
 }
 
 const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -47,8 +47,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   lightModeBackgrounds,
   darkModeBackgrounds,
   modelOptions,
-  showGauges,
-  setShowGauges,
+  cheatMode,
+  setCheatMode,
 }) => {
   if (!isOpen) return null;
 
@@ -118,6 +118,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
               enabled={useCensorship}
               onToggle={() => setUseCensorship(!useCensorship)}
             />
+            <ToggleSwitch
+              label="チートモード"
+              description="オフにするとゲージの手動編集が可能になります。"
+              enabled={cheatMode}
+              onToggle={() => setCheatMode(!cheatMode)}
+            />
           </SettingSection>
 
           <SettingSection title="表示設定">
@@ -132,12 +138,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
               description="AIが応答にC(red)[テキスト]Cのような形式で色を指定できるようにします。"
               enabled={allowAICustomTextColor}
               onToggle={() => setAllowAICustomTextColor(!allowAICustomTextColor)}
-            />
-            <ToggleSwitch
-              label="感情ゲージを表示"
-              description="チャットヘッダーに感情ゲージ表示ボタンを配置します。"
-              enabled={showGauges}
-              onToggle={() => setShowGauges(!showGauges)}
             />
             <div>
               <label className={`block text-sm font-medium mb-1.5`}>チャットフォントサイズ</label>

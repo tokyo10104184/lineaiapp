@@ -52,6 +52,11 @@ const QUICK_MESSAGES = [
     { id: '1', text: 'こんにちは！' }, { id: '2', text: 'ありがとう！' }, { id: '3', text: 'いいね' }
 ];
 
+const DEFAULT_GAUGES: EmotionGauges = {
+  intimacy: 20, trust: 20, mood: 20, dependence: 20, excitement: 20,
+  jealousy: 20, curiosity: 20, comfort: 20, pleasure: 20
+};
+
 // --- Helper Functions ---
 const formatTime = (date: Date | string): string => {
   try {
@@ -105,7 +110,8 @@ export default function Home() {
   const [newCharacter, setNewCharacter] = useState<Partial<Character>>({
     name: '', description: '', systemPrompt: '', color: '#6366f1',
     activeHours: { start: 0, end: 23 }, useActiveHours: false, icon: '👤', isPublic: false,
-    gauges: { intimacy: 50, trust: 50, mood: 50, dependence: 20, excitement: 50, jealousy: 30, curiosity: 70, comfort: 50, pleasure: 30 }
+    gauges: DEFAULT_GAUGES,
+    useGauges: true,
   });
   const [lineThemeActive, setLineThemeActive] = useState(false);
   // const [showEmotionIcons, setShowEmotionIcons] = useState(true); // Removed
@@ -114,6 +120,7 @@ export default function Home() {
   const [displayedQuote, setDisplayedQuote] = useState<{ quote: string; author: string } | null>(null);
   const [chatFontSize, setChatFontSize] = useState('text-sm'); // Added state for chat font size
   const [allowAICustomTextColor, setAllowAICustomTextColor] = useState(true); // Renamed, default true
+  const [cheatMode, setCheatMode] = useState(true); // Added for gauge editing
 
   const [showCharToCharSelectModal, setShowCharToCharSelectModal] = useState(false);
   const [charToCharCandidates, setCharToCharCandidates] = useState<[string | null, string | null]>([null, null]);
@@ -136,7 +143,6 @@ export default function Home() {
   const [showCharacterSelection, setShowCharacterSelection] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showGaugesModal, setShowGaugesModal] = useState(false);
-  const [showGauges, setShowGauges] = useState(true);
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const chatMessagesContainerRef = useRef<HTMLDivElement>(null)
@@ -188,7 +194,8 @@ export default function Home() {
         if (data.characters && data.characters.length > 0) {
           loadedCharacters = (data.characters || []).map((char: Character) => ({
             ...char,
-            gauges: char.gauges || { intimacy: 50, trust: 50, mood: 50, dependence: 20, excitement: 50, jealousy: 30, curiosity: 70, comfort: 50, pleasure: 30 }
+            gauges: char.gauges || DEFAULT_GAUGES,
+            useGauges: char.useGauges === undefined ? true : char.useGauges,
           }));
         }
 
@@ -202,13 +209,13 @@ export default function Home() {
         setIsAutoReplying(data.isAutoReplying || false);
         setChatFontSize(data.chatFontSize || 'text-sm');
         setAllowAICustomTextColor(data.allowAICustomTextColor === undefined ? true : data.allowAICustomTextColor);
-        setShowGauges(data.showGauges === undefined ? true : data.showGauges);
+        setCheatMode(data.cheatMode === undefined ? true : data.cheatMode);
       } else {
         // Set default settings for a fresh start
         setBackgroundColor(Object.keys(LIGHT_MODE_CHAT_BACKGROUNDS)[0]);
         setChatFontSize('text-sm');
         setAllowAICustomTextColor(true);
-        setShowGauges(true);
+        setCheatMode(true);
       }
     } catch (error) {
       console.error("Failed to load or parse data from localStorage:", error);
@@ -237,7 +244,8 @@ export default function Home() {
           activeHours: { start: 20, end: 2 },
           useActiveHours: true,
           isPublic: true,
-          gauges: { intimacy: 30, trust: 40, mood: 50, dependence: 20, excitement: 40, jealousy: 60, curiosity: 80, comfort: 50, pleasure: 20 },
+          gauges: DEFAULT_GAUGES,
+          useGauges: true,
         },
         {
           id: 'gf-2-airi',
@@ -249,7 +257,8 @@ export default function Home() {
           activeHours: { start: 7, end: 22 },
           useActiveHours: true,
           isPublic: true,
-          gauges: { intimacy: 50, trust: 60, mood: 80, dependence: 40, excitement: 80, jealousy: 20, curiosity: 60, comfort: 70, pleasure: 50 },
+          gauges: DEFAULT_GAUGES,
+          useGauges: true,
         },
         {
           id: 'gf-3-mio',
@@ -261,7 +270,8 @@ export default function Home() {
           activeHours: { start: 9, end: 23 },
           useActiveHours: false,
           isPublic: true,
-          gauges: { intimacy: 60, trust: 80, mood: 70, dependence: 50, excitement: 50, jealousy: 10, curiosity: 50, comfort: 90, pleasure: 40 },
+          gauges: DEFAULT_GAUGES,
+          useGauges: true,
         },
         {
           id: 'gf-4-rina',
@@ -273,7 +283,8 @@ export default function Home() {
           activeHours: { start: 10, end: 24 },
           useActiveHours: false,
           isPublic: true,
-          gauges: { intimacy: 20, trust: 30, mood: 40, dependence: 60, excitement: 70, jealousy: 80, curiosity: 70, comfort: 30, pleasure: 60 },
+          gauges: DEFAULT_GAUGES,
+          useGauges: true,
         },
       ];
       setCharacters(defaultGirlfriends);
@@ -290,11 +301,11 @@ export default function Home() {
            lineThemeActive, displayedQuote, isAutoReplying, // showEmotionIcons removed
           chatFontSize, // Save chat font size
            allowAICustomTextColor, // Save new setting
-           showGauges,
+           cheatMode,
         };
         localStorage.setItem('chatAppData', JSON.stringify(data));
     }
-  }, [conversations, characters, currentConversationId, currentCharacterId, backgroundColor, isDarkMode, useCensorship, lineThemeActive, displayedQuote, isAutoReplying, chatFontSize, allowAICustomTextColor, showGauges]);
+  }, [conversations, characters, currentConversationId, currentCharacterId, backgroundColor, isDarkMode, useCensorship, lineThemeActive, displayedQuote, isAutoReplying, chatFontSize, allowAICustomTextColor, cheatMode]);
 
   useEffect(() => {
     const sidebarElement = sidebarRef.current;
@@ -483,10 +494,11 @@ export default function Home() {
       useActiveHours: newCharacter.useActiveHours || false,
       icon: newCharacter.icon || '👤',
       isPublic: newCharacter.isPublic || false,
-      gauges: newCharacter.gauges || { intimacy: 50, trust: 50, mood: 50, dependence: 20, excitement: 50, jealousy: 30, curiosity: 70, comfort: 50, pleasure: 30 },
+      gauges: newCharacter.gauges || DEFAULT_GAUGES,
+      useGauges: newCharacter.useGauges === undefined ? true : newCharacter.useGauges,
     }
     setCharacters(prev => [character, ...prev]);
-    setNewCharacter({ name: '', description: '', systemPrompt: '', color: '#6366f1', activeHours: { start: 0, end: 23 }, useActiveHours: false, icon: '👤', isPublic: false, gauges: { intimacy: 50, trust: 50, mood: 50, dependence: 20, excitement: 50, jealousy: 30, curiosity: 70, comfort: 50, pleasure: 30 } })
+    setNewCharacter({ name: '', description: '', systemPrompt: '', color: '#6366f1', activeHours: { start: 0, end: 23 }, useActiveHours: false, icon: '👤', isPublic: false, gauges: DEFAULT_GAUGES, useGauges: true })
     setShowCharacterDialog(false); if (window.innerWidth < 1024) setSidebarOpen(false);
   }, [newCharacter, generateSystemPrompt]);
 
@@ -744,11 +756,12 @@ export default function Home() {
                 };
             });
 
-            const messagesPayload = [
-              { role: 'system', content: FORMATTING_INSTRUCTIONS_PROMPT },
-              { role: 'system', content: currentCharacterForNormalChat.systemPrompt },
-              ...historyForApi
-            ];
+            const messagesPayload = [];
+            if (currentCharacterForNormalChat.useGauges) {
+                messagesPayload.push({ role: 'system', content: FORMATTING_INSTRUCTIONS_PROMPT });
+            }
+            messagesPayload.push({ role: 'system', content: currentCharacterForNormalChat.systemPrompt });
+            messagesPayload.push(...historyForApi);
             const apiRequestBody: ChutesApiRequestBody = { model, messages: messagesPayload, temperature, useCensorship };
             if (isImageMessage && localImageDataUrl && currentModelSupportsImage && !editedMessageId) {
                 apiRequestBody.imageDataUrl = localImageDataUrl;
@@ -1357,12 +1370,12 @@ export default function Home() {
       // Add a prompt to encourage continuation
       const continuationPrompt = { role: 'user', content: "続けてください。" }; // Simple prompt
 
-      const messagesPayload = [
-        { role: 'system', content: FORMATTING_INSTRUCTIONS_PROMPT },
-        { role: 'system', content: currentCharacterForNormalChat.systemPrompt },
-        ...historyForApi,
-        continuationPrompt // Add the continuation prompt here
-      ];
+      const messagesPayload = [];
+      if (currentCharacterForNormalChat.useGauges) {
+          messagesPayload.push({ role: 'system', content: FORMATTING_INSTRUCTIONS_PROMPT });
+      }
+      messagesPayload.push({ role: 'system', content: currentCharacterForNormalChat.systemPrompt });
+      messagesPayload.push(...historyForApi, continuationPrompt);
 
       const apiRequestBody: ChutesApiRequestBody = {
         model,
@@ -1701,8 +1714,8 @@ export default function Home() {
         lightModeBackgrounds={LIGHT_MODE_CHAT_BACKGROUNDS}
         darkModeBackgrounds={DARK_MODE_CHAT_BACKGROUNDS}
         modelOptions={MODEL_OPTIONS}
-        showGauges={showGauges}
-        setShowGauges={setShowGauges}
+        cheatMode={cheatMode}
+        setCheatMode={setCheatMode}
       />
 
       <GaugesModal
@@ -1710,6 +1723,15 @@ export default function Home() {
         onClose={() => setShowGaugesModal(false)}
         character={currentCharacterForNormalChat}
         isDarkMode={isDarkMode}
+        cheatMode={cheatMode}
+        onGaugesChange={(newGauges) => {
+            if (!currentCharacterForNormalChat) return;
+            setCharacters(chars => chars.map(c => c.id === currentCharacterForNormalChat.id ? {...c, gauges: newGauges} : c));
+        }}
+        onGaugesReset={() => {
+            if (!currentCharacterForNormalChat) return;
+            setCharacters(chars => chars.map(c => c.id === currentCharacterForNormalChat.id ? {...c, gauges: DEFAULT_GAUGES} : c));
+        }}
       />
 
       <div className="flex flex-1 overflow-hidden">
@@ -1881,7 +1903,7 @@ export default function Home() {
                 ) : (<h2 className={`text-lg font-semibold ${chatHeaderActualTextColor}`}>キャラクターを選択してください</h2>)}
             </div>
             <div className="flex items-center space-x-2">
-              {currentCharacterForNormalChat && showGauges && (
+              {currentCharacterForNormalChat && currentCharacterForNormalChat.useGauges && (
                 <button onClick={() => setShowGaugesModal(true)} className={`p-2.5 rounded-md hover:${isDarkMode || (lineThemeActive && isLineDark)?'bg-slate-700/70':'bg-slate-200/70'} ${chatHeaderActualTextColor} transition-colors`} title="感情ゲージ">
                   <FaChartBar size={18} />
                 </button>
@@ -1952,6 +1974,7 @@ export default function Home() {
                 </div>
               )}
               <div className="flex items-center space-x-2 pt-1"> <input type="checkbox" id="isPublicModal" checked={editingCharacter ? editingCharacter.isPublic : newCharacter.isPublic} onChange={(e) => editingCharacter ? setEditingCharacter({...editingCharacter, isPublic: e.target.checked}) : setNewCharacter({...newCharacter, isPublic: e.target.checked})} className="h-4 w-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500 cursor-pointer" /> <label htmlFor="isPublicModal" className="text-sm cursor-pointer select-none">公開キャラクター (将来用)</label> </div>
+              <div className="flex items-center space-x-2 pt-1"> <input type="checkbox" id="useGaugesModal" checked={editingCharacter ? editingCharacter.useGauges : newCharacter.useGauges} onChange={(e) => editingCharacter ? setEditingCharacter({...editingCharacter, useGauges: e.target.checked}) : setNewCharacter({...newCharacter, useGauges: e.target.checked})} className="h-4 w-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500 cursor-pointer" /> <label htmlFor="useGaugesModal" className="text-sm cursor-pointer select-none">感情ゲージを使用する</label> </div>
             </div>
             <div className="mt-6 flex flex-col sm:flex-row justify-between items-center gap-3">
               <button onClick={handleGenerateRandomCharacterInDialog} className={`px-5 py-2.5 rounded-lg border ${generalBorderColor} hover:${isDarkMode?'bg-slate-700/70':'bg-slate-100'} transition-colors duration-150 w-full sm:w-auto ${generalTextColor} font-medium shadow-sm`}> ランダム生成 </button>
