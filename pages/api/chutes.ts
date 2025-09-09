@@ -2,56 +2,57 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
-    res.status(405).json({ error: 'Method not allowed' });
+    res.status(405).json({ error: 'Method Not Allowed' });
     return;
   }
 
-  const { messages, model, temperature = 0.7 } = req.body;
+  const { messages, model, temperature = 0.7, useCensorship, imageDataUrl } = req.body;
+
   if (!messages || !model) {
-    res.status(400).json({ error: 'Messages and model are required' });
-    return;
+    return res.status(400).json({ error: 'messages and model are required' });
   }
+
+  const siteUrl = "http://localhost:3000";
+  const siteName = "My Chat App";
 
   try {
-    const apiKey = process.env.CHUTES_API_KEY || 'cpk_ed4118b93283415581ce5204721bd861.429d755b1300581582cc392083a49856.8h5PsYWKyHyj1D1QneemTMBwZKFNKUQy';
-    
-    console.log('Making API request to chutes.com with model:', model);
-    
-    const apiRes = await fetch('https://llm.chutes.ai/v1/chat/completions', {
-      method: 'POST',
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
+        "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": siteUrl,
+        "X-Title": siteName,
       },
       body: JSON.stringify({
-        model,
-        messages,
-        temperature,
+        model: model,
+        messages: messages,
+        temperature: temperature,
+        // OpenRouter doesn't have a direct 'useCensorship' param,
+        // but some models might be moderated by default.
+        // We are not passing this to the API.
       }),
     });
 
-    console.log('API response status:', apiRes.status);
-
-    if (!apiRes.ok) {
-      const text = await apiRes.text();
-      console.error('API error response:', text);
-      res.status(apiRes.status).json({ error: text });
-      return;
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("OpenRouter API Error:", response.status, errorText);
+      return res.status(response.status).json({ error: `APIエラーが発生しました: ${errorText}` });
     }
 
-    const data = await apiRes.json();
-    console.log('API response data:', data);
-    
-    if (!data.choices || !data.choices[0] || !data.choices[0].message) {
-      console.error('Unexpected API response structure:', data);
-      res.status(500).json({ error: 'Unexpected API response structure' });
-      return;
+    const data = await response.json();
+    const reply = data.choices[0]?.message?.content;
+
+    if (!reply) {
+      console.error("APIから返信がありません:", data);
+      return res.status(500).json({ error: "APIから返信がありませんでした。" });
     }
     
-    const reply = data.choices[0].message.content;
-    res.status(200).json({ reply });
+    // The frontend expects a 'reply' property
+    res.status(200).json({ reply: reply });
+
   } catch (error) {
-    console.error('API request failed:', error);
-    res.status(500).json({ error: 'Internal Server Error: ' + error.message });
+    console.error("API呼び出し中のエラー:", error);
+    res.status(500).json({ error: "内部サーバーエラーが発生しました。" });
   }
 }

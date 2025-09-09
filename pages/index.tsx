@@ -67,12 +67,8 @@ const RANDOM_QUOTES = [
 ];
 
 const MODEL_OPTIONS = {
-    'Deepseek V3 0324': { value: 'deepseek-ai/DeepSeek-V3-0324', description: '高性能・長文・高速の万能モデル (画像対応)', supportsImage: true },
-    'Deepseek R1 0528': { value: 'deepseek-ai/DeepSeek-R1-0528', description: '深い推論力を備えたモデル', supportsImage: false },
-    'GLM 4 0414': { value: 'THUDM/GLM-4-32B-0414', description: 'GLM-4 32Bモデル (0414バージョン)', supportsImage: false }, // Added
-    'Mistral Small 3.2': { value: 'chutesai/Mistral-Small-3.2-24B-Instruct-2506', description: '軽量・高速な省リソースモデル (3.2)', supportsImage: false }, // Added
-    'Qwen3 32B': { value: 'Qwen/Qwen3-32B', description: '推論力に長けたQwen3 32Bモデル', supportsImage: false }, // Added
-    'Llama 4 Scout': { value: 'chutesai/Llama-4-Scout-17B-16E-Instruct', description: 'バランス型のMeta製モデル', supportsImage: false } // Verified
+    'Sonoma Sky Alpha': { value: 'openrouter/sonoma-sky-alpha', description: 'OpenRouterのSonoma Sky Alphaモデル', supportsImage: false },
+    'Sonoma Dusk Alpha': { value: 'openrouter/sonoma-dusk-alpha', description: 'OpenRouterのSonoma Dusk Alphaモデル', supportsImage: false },
 };
 const LIGHT_MODE_CHAT_BACKGROUNDS = {
     'ペールグレー': '#f8fafc', 'ホワイト': '#ffffff', 'スカイブルー': '#e0f2fe', // This was the previous implicit color for LINE theme light
@@ -132,7 +128,7 @@ export default function Home() {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [currentConversationId, setCurrentConversationId] = useState<string>('')
   const [input, setInput] = useState('')
-  const [model, setModel] = useState('deepseek-ai/DeepSeek-V3-0324')
+  const [model, setModel] = useState('openrouter/sonoma-sky-alpha')
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [temperature, setTemperature] = useState(0.7)
   const [backgroundColor, setBackgroundColor] = useState('ペールグレー')
