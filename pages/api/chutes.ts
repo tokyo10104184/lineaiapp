@@ -28,9 +28,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         model: model,
         messages: messages,
         temperature: temperature,
-        // OpenRouter doesn't have a direct 'useCensorship' param,
-        // but some models might be moderated by default.
-        // We are not passing this to the API.
       }),
     });
 
@@ -48,7 +45,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(500).json({ error: "APIから返信がありませんでした。" });
     }
     
-    // The frontend expects a 'reply' property
     res.status(200).json({ reply: reply });
 
   } catch (error) {
