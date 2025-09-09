@@ -11,7 +11,7 @@ import CharacterSelectionModal from '../components/CharacterSelectionModal';
 import SettingsModal from '../components/SettingsModal';
 import GaugesModal from '../components/GaugesModal';
 import { FORMATTING_INSTRUCTIONS_PROMPT } from '../lib/prompts';
-import { Message, Character, Conversation, ChutesApiRequestBody } from '../lib/types';
+import { Message, Character, Conversation, ChutesApiRequestBody, EmotionGauges } from '../lib/types';
 
 // --- Constants ---
 const SWIPE_THRESHOLD = 50;
@@ -78,6 +78,7 @@ const cleanAIReply = (reply: string): string => {
       /<thinking>[\s\S]*?<\/thinking>/gi,
       /（思考中）[\s\S]*?（ここまで）/g,
       /\[思考\][\s\S]*?\[\/思考\]/g,
+      /<gauges>[\s\S]*?<\/gauges>/g,
   ];
   patternsToRemove.forEach(pattern => { cleanedReply = cleanedReply.replace(pattern, '').trim(); });
   return cleanedReply.trim();
@@ -411,21 +412,34 @@ export default function Home() {
   useEffect(() => {
     if (currentConversation?.isCharToCharConversation) return;
     if (currentConversation?.isGroupChat) return;
-    if (characters.length > 0 && !characters.some(c => c.id === currentCharacterId)) {
-        setCurrentCharacterId(characters[0].id);
+
+    // This effect should only run to manage conversations for an *existing* character selection.
+    // It should not be responsible for the initial character selection.
+
+    // If a character ID is set, but that character doesn't exist (e.g., deleted),
+    // then reset the character selection. This allows the "Start" screen to show.
+    if (currentCharacterId && characters.length > 0 && !characters.some(c => c.id === currentCharacterId)) {
+        setCurrentCharacterId('');
+        setCurrentConversationId(''); // Also clear conversation
         return;
     }
+
+    // If there are no characters at all, ensure everything is cleared.
     if (characters.length === 0) {
         setCurrentCharacterId('');
         setCurrentConversationId('');
         return;
     }
+
+    // If a valid character is selected, ensure they have a conversation.
     if (currentCharacterId) {
       const charConversations = conversations.filter(c => c.characterId === currentCharacterId && !c.isCharToCharConversation)
                                           .sort((a, b) => parseInt(b.id) - parseInt(a.id));
       if (charConversations.length === 0) {
+          // Only create a new conversation if one doesn't exist for this character.
           createNewConversation(currentCharacterId);
       } else {
+          // If the current conversation isn't for the selected character, switch to their latest one.
           if (!currentConversationId || !charConversations.some(c => c.id === currentConversationId)) {
               setCurrentConversationId(charConversations[0].id);
           }
@@ -509,6 +523,41 @@ export default function Home() {
     if (editingCharacter) setEditingCharacter(prev => ({ ...(prev as Character), ...randomValues }));
     else setNewCharacter(prev => ({...prev, ...randomValues}));
   }, [editingCharacter, generateRandomCharacterValues]);
+
+  const extractAndApplyGaugeChanges = useCallback((reply: string, characterId: string): string => {
+    const gaugeMatch = reply.match(/<gauges>([\s\S]*?)<\/gauges>/);
+    const cleanedReply = reply.replace(/<gauges>[\s\S]*?<\/gauges>/, '').trim();
+
+    if (!gaugeMatch || !gaugeMatch[1]) {
+      return cleanedReply;
+    }
+
+    try {
+      const gaugeChanges = JSON.parse(gaugeMatch[1]);
+
+      setCharacters(prevChars => prevChars.map(char => {
+        if (char.id === characterId) {
+          const newGauges = { ...char.gauges };
+          let hasChanged = false;
+          for (const key in gaugeChanges) {
+            if (Object.prototype.hasOwnProperty.call(newGauges, key)) {
+              const change = Number(gaugeChanges[key]);
+              if (!isNaN(change)) {
+                newGauges[key as keyof EmotionGauges] = Math.max(0, Math.min(100, newGauges[key as keyof EmotionGauges] + change));
+                hasChanged = true;
+              }
+            }
+          }
+          return hasChanged ? { ...char, gauges: newGauges } : char;
+        }
+        return char;
+      }));
+    } catch (e) {
+      console.error("Failed to parse gauge JSON:", gaugeMatch[1], e);
+    }
+
+    return cleanedReply;
+  }, []);
 
   const sendMessage = useCallback(async (messageContent?: string, editedMessageId?: string) => {
     const textToSend = messageContent || input;
@@ -713,9 +762,12 @@ export default function Home() {
             if (!response.ok) { const errorData = await response.text(); throw new Error(`HTTP error! status: ${response.status}, message: ${errorData}`); }
             const data = await response.json();
             let rawReply = data.reply || 'エラーが発生しました。応答がありません。';
-            let cleanedReply = cleanAIReply(rawReply);
-            // const emotion = extractEmotion(cleanedReply); // Emotion removed
-            const finalReplyText = cleanedReply.replace(/\[感情:.+?\]/, '').trim(); // Keep this to remove any residual emotion tags
+
+            if (currentCharacterForNormalChat) {
+                rawReply = extractAndApplyGaugeChanges(rawReply, currentCharacterForNormalChat.id);
+            }
+
+            const finalReplyText = cleanAIReply(rawReply);
 
             const aiMessage: Message = {
                 id: `${Date.now()}-ai`,
@@ -1327,9 +1379,12 @@ export default function Home() {
       if (!response.ok) { const errorData = await response.text(); throw new Error(`HTTP error! status: ${response.status}, message: ${errorData}`); }
       const data = await response.json();
       let rawReply = data.reply || 'エラーが発生しました。応答がありません。';
-      let cleanedReply = cleanAIReply(rawReply);
-      // const emotion = extractEmotion(cleanedReply); // Emotion removed
-      const finalReplyText = cleanedReply.replace(/\[感情:.+?\]/, '').trim(); // Keep this to remove any residual emotion tags
+
+      if (currentCharacterForNormalChat) {
+          rawReply = extractAndApplyGaugeChanges(rawReply, currentCharacterForNormalChat.id);
+      }
+
+      const finalReplyText = cleanAIReply(rawReply);
 
       const aiMessage: Message = {
           id: `${Date.now()}-ai-continue`,
