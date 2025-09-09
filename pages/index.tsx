@@ -21,6 +21,18 @@ interface Message {
   originalText?: string;
 }
 
+interface EmotionGauges {
+  intimacy: number;
+  trust: number;
+  mood: number;
+  dependence: number;
+  excitement: number;
+  jealousy: number;
+  curiosity: number;
+  comfort: number;
+  pleasure: number;
+}
+
 interface Character {
   id: string
   name: string
@@ -31,6 +43,7 @@ interface Character {
   useActiveHours: boolean
   icon: string
   isPublic: boolean
+  gauges: EmotionGauges;
 }
 
 interface Conversation {
@@ -71,16 +84,18 @@ const MODEL_OPTIONS = {
     'Sonoma Dusk Alpha': { value: 'openrouter/sonoma-dusk-alpha', description: 'OpenRouterのSonoma Dusk Alphaモデル', supportsImage: false },
 };
 const LIGHT_MODE_CHAT_BACKGROUNDS = {
-    'ペールグレー': '#f8fafc', 'ホワイト': '#ffffff', 'スカイブルー': '#e0f2fe', // This was the previous implicit color for LINE theme light
-    'ミントグリーン': '#d1fae5', 'ベビーピンク': '#fce7f3', 'ライトイエロー': '#fef9c3',
-    'ラベンダー': '#ede9fe', '青空': '#B0E0F6', // Changed from #87CEEB to a paler version
-    'コーラル': '#fff0f5', 'ライム': '#f0fff0',
+    'ソフトピンク': '#fff1f2',
+    'ラベンダーブリス': '#f5f3ff',
+    'ピーチドリーム': '#fff7ed',
+    'ミスティローズ': '#ffe4e1',
+    'シャンパン': '#f7f3e9',
 };
 const DARK_MODE_CHAT_BACKGROUNDS = {
-    'ダークスレート': '#1e293b', 'ナイトブラック': '#0f172a', 'ミッドナイトブルー': '#312e81',
-    'フォレストグリーン': '#064e3b', 'ディープパープル': '#4c1d95', 'ダークローズ': '#831843',
-    'アッシュブラウン': '#3f3f46',
-    'インディゴナイト': '#283593', 'チャコール': '#36454F',
+    'ミッドナイトパープル': '#2b294a',
+    'トワイライトネイビー': '#1e293b',
+    'アメジスト': '#4c1d95',
+    'ルージュノワール': '#5c1a33',
+    'ディープインディゴ': '#312e81',
 };
 // const EMOTION_COLORS = {
 //     '怒り': '#ef4444', '悲しみ': '#06b6d4', '喜び': '#eab308', '驚き': '#f97316', '平静': '#6b7280'
@@ -131,7 +146,7 @@ export default function Home() {
   const [model, setModel] = useState('openrouter/sonoma-sky-alpha')
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [temperature, setTemperature] = useState(0.7)
-  const [backgroundColor, setBackgroundColor] = useState('ペールグレー')
+  const [backgroundColor, setBackgroundColor] = useState('ソフトピンク')
   const [characters, setCharacters] = useState<Character[]>([])
   const [currentCharacterId, setCurrentCharacterId] = useState<string>('')
   const [showCharacterDialog, setShowCharacterDialog] = useState(false)
@@ -141,9 +156,10 @@ export default function Home() {
   const [isDarkMode, setIsDarkMode] = useState(false)
   const [isSending, setIsSending] = useState(false)
   const [useCensorship, setUseCensorship] = useState(false)
-  const [newCharacter, setNewCharacter] = useState<Omit<Character, 'id'>>({
+  const [newCharacter, setNewCharacter] = useState<Partial<Character>>({
     name: '', description: '', systemPrompt: '', color: '#6366f1',
-    activeHours: { start: 0, end: 23 }, useActiveHours: false, icon: '👤', isPublic: false
+    activeHours: { start: 0, end: 23 }, useActiveHours: false, icon: '👤', isPublic: false,
+    gauges: { intimacy: 50, trust: 50, mood: 50, dependence: 20, excitement: 50, jealousy: 30, curiosity: 70, comfort: 50, pleasure: 30 }
   });
   const [lineThemeActive, setLineThemeActive] = useState(false);
   // const [showEmotionIcons, setShowEmotionIcons] = useState(true); // Removed
@@ -218,7 +234,10 @@ export default function Home() {
           groupParticipantIds: conv.groupParticipantIds || [],
         }));
         setConversations(loadedConversations);
-        initialCharacters = data.characters || [];
+        initialCharacters = (data.characters || []).map((char: Character) => ({
+          ...char,
+          gauges: char.gauges || { intimacy: 50, trust: 50, mood: 50, dependence: 20, excitement: 50, jealousy: 30, curiosity: 70, comfort: 50, pleasure: 30 }
+        }));
         setCharacters(initialCharacters);
         setCurrentConversationId(data.currentConversationId || '');
         setCurrentCharacterId(data.currentCharacterId || '');
@@ -253,14 +272,58 @@ export default function Home() {
     }
 
     if (initialCharacters.length === 0) {
-      const nyanpupuuSystemPrompt = generateSystemPrompt('にゃんぷっぷー', 'フレンドリーで親しみやすい猫のような性格');
-      const defaultChar: Character = {
-        id: 'char-1', name: 'にゃんぷっぷー', description: 'フレンドリーで親しみやすい猫のような性格',
-        systemPrompt: nyanpupuuSystemPrompt,
-        color: '#818cf8', activeHours: { start: 0, end: 23 }, useActiveHours: false, icon: '🐱', isPublic: true
-      };
-      setCharacters(prevChars => (prevChars.length === 0 ? [defaultChar] : prevChars));
-      setCurrentCharacterId(prevId => (prevId === '' && defaultChar.id ? defaultChar.id : prevId));
+      const defaultGirlfriends: Character[] = [
+        {
+          id: 'gf-1-yuki',
+          name: 'ユキ',
+          description: '物静かでミステリアスな文学少女。',
+          systemPrompt: generateSystemPrompt('ユキ', '物静かで、少し影のある文学少女。言葉数は少ないが、時折核心を突くことを言う。'),
+          color: '#a78bfa',
+          icon: '❄️',
+          activeHours: { start: 20, end: 2 },
+          useActiveHours: true,
+          isPublic: true,
+          gauges: { intimacy: 30, trust: 40, mood: 50, dependence: 20, excitement: 40, jealousy: 60, curiosity: 80, comfort: 50, pleasure: 20 },
+        },
+        {
+          id: 'gf-2-airi',
+          name: 'アイリ',
+          description: 'いつも明るく元気なスポーツ好き。',
+          systemPrompt: generateSystemPrompt('アイリ', 'いつも笑顔で元気いっぱい。少しおっちょこちょいなところもあるが、太陽のような明るさで周りを照らす。'),
+          color: '#f472b6',
+          icon: '☀️',
+          activeHours: { start: 7, end: 22 },
+          useActiveHours: true,
+          isPublic: true,
+          gauges: { intimacy: 50, trust: 60, mood: 80, dependence: 40, excitement: 80, jealousy: 20, curiosity: 60, comfort: 70, pleasure: 50 },
+        },
+        {
+          id: 'gf-3-mio',
+          name: 'ミオ',
+          description: '優しくて面倒見の良いお姉さんタイプ。',
+          systemPrompt: generateSystemPrompt('ミオ', '包み込むような優しさを持つ、お姉さん的存在。聞き上手で、いつもあなたのことを気遣ってくれる。'),
+          color: '#86efac',
+          icon: '🌸',
+          activeHours: { start: 9, end: 23 },
+          useActiveHours: false,
+          isPublic: true,
+          gauges: { intimacy: 60, trust: 80, mood: 70, dependence: 50, excitement: 50, jealousy: 10, curiosity: 50, comfort: 90, pleasure: 40 },
+        },
+        {
+          id: 'gf-4-rina',
+          name: 'リナ',
+          description: 'ツンとした態度だけど、実は甘えん坊？',
+          systemPrompt: generateSystemPrompt('リナ', '普段はツンと澄ましているが、心を許した相手にはデレっと甘える一面も。素直になれないことが多い。'),
+          color: '#fca5a5',
+          icon: '츤',
+          activeHours: { start: 10, end: 24 },
+          useActiveHours: false,
+          isPublic: true,
+          gauges: { intimacy: 20, trust: 30, mood: 40, dependence: 60, excitement: 70, jealousy: 80, curiosity: 70, comfort: 30, pleasure: 60 },
+        },
+      ];
+      setCharacters(defaultGirlfriends);
+      // Do not set currentCharacterId here, let the user choose.
     }
   }, [generateSystemPrompt]);
 
@@ -438,28 +501,34 @@ export default function Home() {
   }, []);
 
   const addCharacter = useCallback(() => {
-    if (!newCharacter.name.trim()) return
+    if (!newCharacter.name?.trim()) return
     const charDescription = newCharacter.description || 'フレンドリーなAI';
     const charSystemPrompt = newCharacter.systemPrompt || generateSystemPrompt(newCharacter.name, charDescription);
     const character: Character = {
-      id: Date.now().toString(), ...newCharacter,
+      id: Date.now().toString(),
+      name: newCharacter.name,
       description: charDescription,
       systemPrompt: charSystemPrompt,
+      color: newCharacter.color || '#6366f1',
+      activeHours: newCharacter.activeHours || { start: 0, end: 23 },
+      useActiveHours: newCharacter.useActiveHours || false,
       icon: newCharacter.icon || '👤',
+      isPublic: newCharacter.isPublic || false,
+      gauges: newCharacter.gauges || { intimacy: 50, trust: 50, mood: 50, dependence: 20, excitement: 50, jealousy: 30, curiosity: 70, comfort: 50, pleasure: 30 },
     }
     setCharacters(prev => [character, ...prev]);
-    setNewCharacter({ name: '', description: '', systemPrompt: '', color: '#6366f1', activeHours: { start: 0, end: 23 }, useActiveHours: false, icon: '👤', isPublic: false })
+    setNewCharacter({ name: '', description: '', systemPrompt: '', color: '#6366f1', activeHours: { start: 0, end: 23 }, useActiveHours: false, icon: '👤', isPublic: false, gauges: { intimacy: 50, trust: 50, mood: 50, dependence: 20, excitement: 50, jealousy: 30, curiosity: 70, comfort: 50, pleasure: 30 } })
     setShowCharacterDialog(false); if (window.innerWidth < 1024) setSidebarOpen(false);
   }, [newCharacter, generateSystemPrompt]);
 
   const saveCharacterEdit = useCallback(() => {
-    if (!editingCharacter || !editingCharacter.name.trim()) return
+    if (!editingCharacter || !editingCharacter.name?.trim()) return
     const charDescription = editingCharacter.description || 'フレンドリーなAI';
     const updatedCharacterData = { ...editingCharacter,
       description: charDescription,
       systemPrompt: editingCharacter.systemPrompt || generateSystemPrompt(editingCharacter.name, charDescription),
     };
-    setCharacters(prev => prev.map(char => char.id === updatedCharacterData.id ? updatedCharacterData : char))
+    setCharacters(prev => prev.map(char => char.id === updatedCharacterData.id ? updatedCharacterData as Character : char))
     setEditingCharacter(null); setShowCharacterDialog(false)
   }, [editingCharacter, generateSystemPrompt]);
 
@@ -1574,8 +1643,8 @@ export default function Home() {
   return (
     <div className="h-screen flex flex-col selection:bg-indigo-500 selection:text-white antialiased" style={{ backgroundColor: rootPageActualBg }}>
       <Head>
-        <title>メッセンジャーAI</title>
-        <meta name="description" content="AIとチャットできるアプリケーション" />
+<title>Kint</title>
+<meta name="description" content="AI異性交遊ロールプレイアプリ" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
         <link rel="icon" href="/favicon.ico" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -1593,7 +1662,7 @@ export default function Home() {
         `}>
           <div className={`p-4 border-b ${sidebarActualBorderColor} bg-gradient-to-br from-indigo-600 to-purple-700`}>
             <div className="flex justify-between items-center">
-              <h1 className={`font-semibold text-xl flex items-center ${sidebarHeaderTextColor}`}> <FaRobot className="mr-2.5 text-2xl" /> メッセンジャーAI </h1>
+              <h1 className={`font-semibold text-xl flex items-center ${sidebarHeaderTextColor}`}> <FaRobot className="mr-2.5 text-2xl" /> Kint </h1>
               <div className="flex items-center space-x-2">
                 {sidebarOpen && (
                   <button
