@@ -156,9 +156,8 @@ export default function Home() {
   const [viewMode, setViewMode] = useState<'chat' | 'marketplace'>('chat');
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [showNewCharacterChoiceModal, setShowNewCharacterChoiceModal] = useState(false);
-  // const [isAIEditModalOpen, setIsAIEditModalOpen] = useState(false); // Temporarily disabled for debugging
+  const [isAIEditModalOpen, setIsAIEditModalOpen] = useState(false);
 
-  // Re-commit trigger
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const chatMessagesContainerRef = useRef<HTMLDivElement>(null)
   const sidebarRef = useRef<HTMLDivElement>(null);
@@ -1853,14 +1852,14 @@ export default function Home() {
 
       <AuthModal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} />
 
-      {/* <AIEditModal
+      {isAIEditModalOpen && <AIEditModal
         isOpen={isAIEditModalOpen}
         onClose={() => setIsAIEditModalOpen(false)}
         character={editingCharacter}
         onApplyProposal={(proposal) => setEditingCharacter(proposal)}
         isDarkMode={isDarkMode}
         model={model}
-      /> */}
+      />}
 
       <NewCharacterChoiceModal
         isOpen={showNewCharacterChoiceModal}
@@ -2217,7 +2216,7 @@ export default function Home() {
             <div className="mt-6 flex flex-col sm:flex-row justify-between items-center gap-3">
               <div className="flex gap-2 w-full sm:w-auto">
                 <button onClick={handleGenerateRandomCharacterInDialog} className={`px-5 py-2.5 rounded-lg border ${generalBorderColor} hover:${isDarkMode?'bg-slate-700/70':'bg-slate-100'} transition-colors duration-150 w-full sm:w-auto ${generalTextColor} font-medium shadow-sm`}> ランダム生成 </button>
-                {/* <button onClick={() => setIsAIEditModalOpen(true)} disabled={!editingCharacter} className={`px-5 py-2.5 rounded-lg border ${generalBorderColor} hover:${isDarkMode?'bg-slate-700/70':'bg-slate-100'} transition-colors duration-150 w-full sm:w-auto ${generalTextColor} font-medium shadow-sm flex items-center disabled:opacity-50 disabled:cursor-not-allowed`}><FaMagic className="mr-2 text-indigo-400" /> AIで編集</button> */}
+                <button onClick={() => setIsAIEditModalOpen(true)} disabled={!editingCharacter} className={`px-5 py-2.5 rounded-lg border ${generalBorderColor} hover:${isDarkMode?'bg-slate-700/70':'bg-slate-100'} transition-colors duration-150 w-full sm:w-auto ${generalTextColor} font-medium shadow-sm flex items-center disabled:opacity-50 disabled:cursor-not-allowed`}><FaMagic className="mr-2 text-indigo-400" /> AIで編集</button>
               </div>
               <div className="flex flex-col sm:flex-row gap-3 sm:gap-2 w-full sm:w-auto">
                 <button onClick={() => { setShowCharacterDialog(false); setEditingCharacter(null); }} className={`px-6 py-2.5 rounded-lg border ${generalBorderColor} hover:${isDarkMode?'bg-slate-700/70':'bg-slate-100'} transition-colors duration-150 w-full sm:w-auto ${generalTextColor} font-medium shadow-sm`}> キャンセル </button>
