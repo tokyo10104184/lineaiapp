@@ -15,7 +15,7 @@ import QuickCreateCharacterModal, { CreatorPersona } from '../components/QuickCr
 import Marketplace from '../components/Marketplace';
 import AuthModal from '../components/AuthModal';
 import UserMenu from '../components/UserMenu';
-import { useAuth } from '../src/contexts/AuthContext';
+import { useAuth } from '@/src/contexts/AuthContext';
 import { FORMATTING_INSTRUCTIONS_PROMPT, CREATOR_PERSONA_PROMPTS } from '../lib/prompts';
 import { Message, Character, Conversation, ChutesApiRequestBody, EmotionGauges } from '../lib/types';
 
