@@ -206,8 +206,16 @@ export default function Home() {
         setConversations(loadedConversations);
 
         if (data.characters && data.characters.length > 0) {
-          loadedCharacters = (data.characters || []).map((char: Character) => ({
+          loadedCharacters = (data.characters || []).map((char: any): Character => ({
             ...char,
+            description: char.description || '',
+            systemPrompt: char.systemPrompt || '',
+            color: char.color || '#6366f1',
+            icon: char.icon || '👤',
+            activeHours: char.activeHours || { start: 0, end: 23 },
+            useActiveHours: char.useActiveHours === undefined ? false : char.useActiveHours,
+            isPublic: char.isPublic === undefined ? false : char.isPublic,
+            public_id: char.public_id || null,
             gauges: char.gauges || DEFAULT_GAUGES,
             useGauges: char.useGauges === undefined ? true : char.useGauges,
           }));
