@@ -9,7 +9,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     try {
       const { data, error } = await supabase
         .from('public_characters')
-        .select('id, name, description, icon, color, use_gauges, likes_count')
+        .select('id, name, description, icon, color, use_gauges, likes_count, profiles(username)')
         .order('created_at', { ascending: false });
 
       if (error) {
