@@ -1,5 +1,5 @@
 import React from 'react';
-import { FaUserPlus } from 'react-icons/fa';
+import { FaUserPlus, FaMagic } from 'react-icons/fa';
 
 import { Character } from '../lib/types';
 
@@ -9,6 +9,7 @@ interface CharacterSelectionModalProps {
   characters: Character[];
   onSelectCharacter: (characterId: string) => void;
   onCreateNew: () => void;
+  onQuickCreate: () => void;
   isDarkMode: boolean;
 }
 
@@ -18,6 +19,7 @@ const CharacterSelectionModal: React.FC<CharacterSelectionModalProps> = ({
   characters,
   onSelectCharacter,
   onCreateNew,
+  onQuickCreate,
   isDarkMode,
 }) => {
   if (!isOpen) return null;
@@ -48,6 +50,17 @@ const CharacterSelectionModal: React.FC<CharacterSelectionModalProps> = ({
               <p className="text-sm opacity-80 mt-1">{char.description}</p>
             </div>
           ))}
+          <div
+            className={`rounded-lg p-4 text-center cursor-pointer transition-all duration-200 transform hover:scale-105 shadow-lg flex flex-col items-center justify-center ${cardBgColor} ${cardHoverBgColor} border-2 border-dashed border-indigo-400/50`}
+            onClick={onQuickCreate}
+          >
+            <div className="text-6xl w-24 h-24 mx-auto rounded-full flex items-center justify-center mb-4 bg-opacity-50 text-indigo-400"
+                 style={{backgroundColor: isDarkMode ? '#4a5568' : '#e2e8f0'}}>
+              <FaMagic />
+            </div>
+            <h3 className="font-bold text-xl">クイック作成</h3>
+            <p className="text-sm opacity-80 mt-1">AIにキャラクターを作ってもらう</p>
+          </div>
           <div
             className={`rounded-lg p-4 text-center cursor-pointer transition-all duration-200 transform hover:scale-105 shadow-lg flex flex-col items-center justify-center ${cardBgColor} ${cardHoverBgColor}`}
             onClick={onCreateNew}

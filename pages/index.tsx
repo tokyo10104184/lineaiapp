@@ -10,7 +10,8 @@ import GroupChatCreationModal from '../components/GroupChatCreationModal';
 import CharacterSelectionModal from '../components/CharacterSelectionModal';
 import SettingsModal from '../components/SettingsModal';
 import GaugesModal from '../components/GaugesModal';
-import { FORMATTING_INSTRUCTIONS_PROMPT } from '../lib/prompts';
+import QuickCreateCharacterModal, { CreatorPersona } from '../components/QuickCreateCharacterModal';
+import { FORMATTING_INSTRUCTIONS_PROMPT, CREATOR_PERSONA_PROMPTS } from '../lib/prompts';
 import { Message, Character, Conversation, ChutesApiRequestBody, EmotionGauges } from '../lib/types';
 
 // --- Constants ---
@@ -133,6 +134,7 @@ export default function Home() {
 
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editingMessageText, setEditingMessageText] = useState<string>('');
+  const [isGenerating, setIsGenerating] = useState(false);
 
   const [showDeleteConversationDialog, setShowDeleteConversationDialog] = useState(false);
   const [conversationToDeleteId, setConversationToDeleteId] = useState<string | null>(null);
@@ -143,6 +145,7 @@ export default function Home() {
   const [showCharacterSelection, setShowCharacterSelection] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showGaugesModal, setShowGaugesModal] = useState(false);
+  const [showQuickCreateModal, setShowQuickCreateModal] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const chatMessagesContainerRef = useRef<HTMLDivElement>(null)
@@ -535,6 +538,53 @@ export default function Home() {
     if (editingCharacter) setEditingCharacter(prev => ({ ...(prev as Character), ...randomValues }));
     else setNewCharacter(prev => ({...prev, ...randomValues}));
   }, [editingCharacter, generateRandomCharacterValues]);
+
+  const handleGeneratePrompt = useCallback(async (persona: CreatorPersona, userPrompt: string) => {
+    setIsGenerating(true);
+    try {
+        const creatorSystemPrompt = CREATOR_PERSONA_PROMPTS[persona];
+        const messagesPayload = [
+            { role: 'system', content: creatorSystemPrompt },
+            { role: 'user', content: userPrompt }
+        ];
+        const apiRequestBody: ChutesApiRequestBody = {
+            model,
+            messages: messagesPayload,
+            temperature: 0.8, // Use a slightly higher temperature for creativity
+            useCensorship: false, // Allow more creative freedom
+        };
+
+        const response = await fetch('/api/chutes', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(apiRequestBody)
+        });
+
+        if (!response.ok) {
+            const errorData = await response.text();
+            throw new Error(`HTTP error! status: ${response.status}, message: ${errorData}`);
+        }
+
+        const data = await response.json();
+        const generatedPrompt = data.reply || '';
+
+        // Pre-fill the new character form with the generated prompt
+        setNewCharacter(prev => ({
+            ...prev,
+            systemPrompt: generatedPrompt,
+            name: '',
+            description: userPrompt.substring(0, 50), // Use user prompt as description basis
+        }));
+        setShowQuickCreateModal(false);
+        setShowCharacterDialog(true);
+
+    } catch (error) {
+        console.error("Error generating character prompt:", error);
+        alert("プロンプトの生成中にエラーが発生しました。");
+    } finally {
+        setIsGenerating(false);
+    }
+  }, [model, temperature]);
 
   const extractAndApplyGaugeChanges = useCallback((reply: string, characterId: string): string => {
     const gaugeMatch = reply.match(/<gauges>([\s\S]*?)<\/gauges>/);
@@ -1689,6 +1739,10 @@ export default function Home() {
             setShowCharacterSelection(false);
             setShowCharacterDialog(true);
           }}
+          onQuickCreate={() => {
+            setShowCharacterSelection(false);
+            setShowQuickCreateModal(true);
+          }}
           isDarkMode={isDarkMode}
         />
       )}
@@ -1732,6 +1786,14 @@ export default function Home() {
             if (!currentCharacterForNormalChat) return;
             setCharacters(chars => chars.map(c => c.id === currentCharacterForNormalChat.id ? {...c, gauges: DEFAULT_GAUGES} : c));
         }}
+      />
+
+      <QuickCreateCharacterModal
+        isOpen={showQuickCreateModal}
+        onClose={() => setShowQuickCreateModal(false)}
+        isDarkMode={isDarkMode}
+        isGenerating={isGenerating}
+        onGenerate={handleGeneratePrompt}
       />
 
       <div className="flex flex-1 overflow-hidden">
