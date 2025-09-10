@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import {
     FaUserCircle, FaImage, FaPlus, FaEdit, FaTimes, FaRobot, FaTrash, FaPaperPlane,
     FaBars, FaQuestionCircle, FaPaperclip, FaTimesCircle, FaQuoteLeft, FaComments,
-    FaPlay, FaStop, FaFistRaised, FaBalanceScale, FaCommentDots, FaSave, FaUndo, FaUsers, FaCog, FaChartBar
+    FaPlay, FaStop, FaFistRaised, FaBalanceScale, FaCommentDots, FaSave, FaUndo, FaUsers, FaCog, FaChartBar, FaStore
 } from 'react-icons/fa';
 import ConfirmationDialog from '../components/ui/ConfirmationDialog'; // Added import
 import GroupChatCreationModal from '../components/GroupChatCreationModal';
@@ -11,6 +11,7 @@ import CharacterSelectionModal from '../components/CharacterSelectionModal';
 import SettingsModal from '../components/SettingsModal';
 import GaugesModal from '../components/GaugesModal';
 import QuickCreateCharacterModal, { CreatorPersona } from '../components/QuickCreateCharacterModal';
+import Marketplace from '../components/Marketplace';
 import { FORMATTING_INSTRUCTIONS_PROMPT, CREATOR_PERSONA_PROMPTS } from '../lib/prompts';
 import { Message, Character, Conversation, ChutesApiRequestBody, EmotionGauges } from '../lib/types';
 
@@ -146,6 +147,7 @@ export default function Home() {
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showGaugesModal, setShowGaugesModal] = useState(false);
   const [showQuickCreateModal, setShowQuickCreateModal] = useState(false);
+  const [viewMode, setViewMode] = useState<'chat' | 'marketplace'>('chat');
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const chatMessagesContainerRef = useRef<HTMLDivElement>(null)
@@ -483,8 +485,8 @@ export default function Home() {
     setEditingConversationTitle('');
   }, []);
 
-  const addCharacter = useCallback(() => {
-    if (!newCharacter.name?.trim()) return
+  const addCharacter = useCallback(async () => {
+    if (!newCharacter.name?.trim()) return;
     const charDescription = newCharacter.description || 'フレンドリーなAI';
     const charSystemPrompt = newCharacter.systemPrompt || generateSystemPrompt(newCharacter.name, charDescription);
     const character: Character = {
@@ -499,21 +501,57 @@ export default function Home() {
       isPublic: newCharacter.isPublic || false,
       gauges: newCharacter.gauges || DEFAULT_GAUGES,
       useGauges: newCharacter.useGauges === undefined ? true : newCharacter.useGauges,
+    };
+
+    if (character.isPublic) {
+        try {
+            const response = await fetch('/api/public-characters', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(character),
+            });
+            if (!response.ok) {
+                throw new Error('Failed to publish character');
+            }
+            console.log('Character published successfully!');
+        } catch (error) {
+            console.error(error);
+            alert('キャラクターの公開に失敗しました。');
+        }
     }
+
     setCharacters(prev => [character, ...prev]);
-    setNewCharacter({ name: '', description: '', systemPrompt: '', color: '#6366f1', activeHours: { start: 0, end: 23 }, useActiveHours: false, icon: '👤', isPublic: false, gauges: DEFAULT_GAUGES, useGauges: true })
+    setNewCharacter({ name: '', description: '', systemPrompt: '', color: '#6366f1', activeHours: { start: 0, end: 23 }, useActiveHours: false, icon: '👤', isPublic: false, gauges: DEFAULT_GAUGES, useGauges: true });
     setShowCharacterDialog(false); if (window.innerWidth < 1024) setSidebarOpen(false);
   }, [newCharacter, generateSystemPrompt]);
 
-  const saveCharacterEdit = useCallback(() => {
-    if (!editingCharacter || !editingCharacter.name?.trim()) return
+  const saveCharacterEdit = useCallback(async () => {
+    if (!editingCharacter || !editingCharacter.name?.trim()) return;
     const charDescription = editingCharacter.description || 'フレンドリーなAI';
-    const updatedCharacterData = { ...editingCharacter,
+    const updatedCharacterData: Character = { ...editingCharacter,
       description: charDescription,
       systemPrompt: editingCharacter.systemPrompt || generateSystemPrompt(editingCharacter.name, charDescription),
     };
-    setCharacters(prev => prev.map(char => char.id === updatedCharacterData.id ? updatedCharacterData as Character : char))
-    setEditingCharacter(null); setShowCharacterDialog(false)
+
+    if (updatedCharacterData.isPublic) {
+        try {
+            const response = await fetch('/api/public-characters', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(updatedCharacterData),
+            });
+            if (!response.ok) {
+                throw new Error('Failed to publish character');
+            }
+            console.log('Character published successfully!');
+        } catch (error) {
+            console.error(error);
+            alert('キャラクターの公開に失敗しました。');
+        }
+    }
+
+    setCharacters(prev => prev.map(char => char.id === updatedCharacterData.id ? updatedCharacterData : char));
+    setEditingCharacter(null); setShowCharacterDialog(false);
   }, [editingCharacter, generateSystemPrompt]);
 
   const switchToCharacter = useCallback((characterId: string) => {
@@ -538,6 +576,32 @@ export default function Home() {
     if (editingCharacter) setEditingCharacter(prev => ({ ...(prev as Character), ...randomValues }));
     else setNewCharacter(prev => ({...prev, ...randomValues}));
   }, [editingCharacter, generateRandomCharacterValues]);
+
+  const handleImportCharacter = useCallback(async (characterId: string) => {
+    if (characters.some(c => c.id === characterId)) {
+        alert('このキャラクターは既にインポート済みです。');
+        return;
+    }
+    try {
+        const response = await fetch(`/api/public-characters/${characterId}`);
+        if (!response.ok) {
+            throw new Error('キャラクターのインポートに失敗しました。');
+        }
+        const characterToImport = await response.json();
+
+        // Remove server-only fields before adding to local state
+        const { created_at, author_id, likes_count, ...localCharacter } = characterToImport;
+
+        setCharacters(prev => [localCharacter as Character, ...prev]);
+        alert(`キャラクター「${localCharacter.name}」をインポートしました！`);
+        setViewMode('chat');
+        setCurrentCharacterId(localCharacter.id);
+
+    } catch (error) {
+        console.error(error);
+        alert((error as Error).message);
+    }
+  }, [characters]);
 
   const handleGeneratePrompt = useCallback(async (persona: CreatorPersona, userPrompt: string) => {
     setIsGenerating(true);
@@ -1823,6 +1887,15 @@ export default function Home() {
                 <button onClick={() => setIsDarkMode(!isDarkMode)} className={`p-2 rounded-full text-xl ${isDarkMode ? 'bg-yellow-400 text-slate-900 hover:bg-yellow-300' : 'bg-slate-700 text-yellow-300 hover:bg-slate-600'} shadow-md transition-all duration-200`} title={isDarkMode ? "ライトモード" : "ダークモード"}> {isDarkMode ? '☀️' : '🌙'} </button>
               </div>
             </div>
+             <div className="p-2">
+                <button
+                    onClick={() => setViewMode(viewMode === 'chat' ? 'marketplace' : 'chat')}
+                    className={`w-full flex items-center justify-center px-4 py-2.5 rounded-lg transition-colors duration-150 text-sm font-semibold shadow-sm ${viewMode === 'marketplace' ? 'bg-white/30 text-white' : 'bg-white/10 text-white/80 hover:bg-white/20'}`}
+                >
+                    <FaStore className="mr-2" />
+                    {viewMode === 'chat' ? '公開キャラを探す' : 'チャットに戻る'}
+                </button>
+            </div>
           </div>
 
           <div className={`p-4 border-b ${sidebarActualBorderColor}`}>
@@ -1925,96 +1998,105 @@ export default function Home() {
         </div>
 
         <div className="flex-1 flex flex-col overflow-hidden">
-          <div className={`p-4 border-b flex items-center justify-between shadow-sm ${chatHeaderActualBgClass} ${lineThemeActive ? (isLineDark ? 'border-slate-700' : 'border-transparent') : generalBorderColor }`} style={chatHeaderActualBgStyle} >
-            <div className="flex items-center min-w-0">
-                <button onClick={() => setSidebarOpen(!sidebarOpen)} className={`lg:hidden mr-3 p-2.5 rounded-md hover:${isDarkMode || (lineThemeActive && isLineDark)?'bg-slate-700/70':'bg-slate-200/70'} ${chatHeaderActualTextColor} transition-colors`} title="メニューを開閉"> <FaBars size={18} /> </button>
+            {viewMode === 'marketplace' ? (
+                <Marketplace
+                    isDarkMode={isDarkMode}
+                    onImport={handleImportCharacter}
+                />
+            ) : (
+                <>
+                    <div className={`p-4 border-b flex items-center justify-between shadow-sm ${chatHeaderActualBgClass} ${lineThemeActive ? (isLineDark ? 'border-slate-700' : 'border-transparent') : generalBorderColor }`} style={chatHeaderActualBgStyle} >
+                        <div className="flex items-center min-w-0">
+                            <button onClick={() => setSidebarOpen(!sidebarOpen)} className={`lg:hidden mr-3 p-2.5 rounded-md hover:${isDarkMode || (lineThemeActive && isLineDark)?'bg-slate-700/70':'bg-slate-200/70'} ${chatHeaderActualTextColor} transition-colors`} title="メニューを開閉"> <FaBars size={18} /> </button>
 
-                {currentConversation && currentConversation.isGroupChat && currentConversation.groupParticipantIds ? (
-                    <>
-                        <div className="flex -space-x-3 mr-3">
-                            {currentConversation.groupParticipantIds.slice(0, 5).map(id => {
-                                const char = characters.find(c => c.id === id);
-                                if (!char) return null;
-                                return (
-                                    <div key={id} className="text-2xl w-9 h-9 flex items-center justify-center rounded-full shadow-sm border-2 border-white dark:border-slate-800" style={{backgroundColor: char.color || '#A0AEC0'}} title={char.name}>
-                                        {char.icon}
+                            {currentConversation && currentConversation.isGroupChat && currentConversation.groupParticipantIds ? (
+                                <>
+                                    <div className="flex -space-x-3 mr-3">
+                                        {currentConversation.groupParticipantIds.slice(0, 5).map(id => {
+                                            const char = characters.find(c => c.id === id);
+                                            if (!char) return null;
+                                            return (
+                                                <div key={id} className="text-2xl w-9 h-9 flex items-center justify-center rounded-full shadow-sm border-2 border-white dark:border-slate-800" style={{backgroundColor: char.color || '#A0AEC0'}} title={char.name}>
+                                                    {char.icon}
+                                                </div>
+                                            );
+                                        })}
                                     </div>
-                                );
-                            })}
+                                    <h2 className={`text-lg font-semibold truncate ${chatHeaderActualTextColor}`}>
+                                        {currentConversation.title || "Group Chat"}
+                                    </h2>
+                                </>
+                            ) : currentConversation?.isCharToCharConversation && currentConversation.participantCharacterIds ? (
+                                <>
+                                    <div className="flex -space-x-3 mr-3">
+                                        {characters.find(c=>c.id === currentConversation.participantCharacterIds![0]) && <div className="text-2xl w-9 h-9 flex items-center justify-center rounded-full shadow-sm border-2 border-white dark:border-slate-800" style={{backgroundColor: characters.find(c=>c.id === currentConversation.participantCharacterIds![0])?.color || '#A0AEC0'}}>{characters.find(c=>c.id === currentConversation.participantCharacterIds![0])?.icon}</div>}
+                                        {characters.find(c=>c.id === currentConversation.participantCharacterIds![1]) && <div className="text-2xl w-9 h-9 flex items-center justify-center rounded-full shadow-sm border-2 border-white dark:border-slate-800" style={{backgroundColor: characters.find(c=>c.id === currentConversation.participantCharacterIds![1])?.color || '#A0AEC0'}}>{characters.find(c=>c.id === currentConversation.participantCharacterIds![1])?.icon}</div>}
+                                    </div>
+                                    <h2 className={`text-lg font-semibold truncate ${chatHeaderActualTextColor}`}>{currentConversation.title || "キャラクター同士の会話"}</h2>
+                                </>
+                            ) : currentCharacterForNormalChat ? (
+                                <>
+                                    <div className="text-2xl mr-3 w-9 h-9 flex items-center justify-center rounded-full shadow-sm flex-shrink-0" style={{backgroundColor: currentCharacterForNormalChat.color || '#A0AEC0'}}>{currentCharacterForNormalChat.icon}</div>
+                                    <div className="min-w-0">
+                                        <h2 className={`text-lg font-semibold truncate ${chatHeaderActualTextColor}`}>{currentCharacterForNormalChat.name}</h2>
+                                        {currentCharacterForNormalChat.useActiveHours && ( <span className={`text-xs font-medium px-1.5 py-0.5 rounded-full ${isCharacterActive(currentCharacterForNormalChat) ? (lineThemeActive && !isLineDark ? 'bg-lime-200 text-lime-700':'bg-green-500/20 text-green-400') : (lineThemeActive && !isLineDark ? 'bg-red-200 text-red-700':'bg-red-500/20 text-red-400')}`}> {isCharacterActive(currentCharacterForNormalChat) ? '● オンライン' : `○ オフライン (${currentCharacterForNormalChat.activeHours.start}:00-${currentCharacterForNormalChat.activeHours.end}:00)`} </span> )}
+                                    </div>
+                                </>
+                            ) : (<h2 className={`text-lg font-semibold ${chatHeaderActualTextColor}`}>キャラクターを選択してください</h2>)}
                         </div>
-                        <h2 className={`text-lg font-semibold truncate ${chatHeaderActualTextColor}`}>
-                            {currentConversation.title || "Group Chat"}
-                        </h2>
-                    </>
-                ) : currentConversation?.isCharToCharConversation && currentConversation.participantCharacterIds ? (
-                    <>
-                        <div className="flex -space-x-3 mr-3">
-                            {characters.find(c=>c.id === currentConversation.participantCharacterIds![0]) && <div className="text-2xl w-9 h-9 flex items-center justify-center rounded-full shadow-sm border-2 border-white dark:border-slate-800" style={{backgroundColor: characters.find(c=>c.id === currentConversation.participantCharacterIds![0])?.color || '#A0AEC0'}}>{characters.find(c=>c.id === currentConversation.participantCharacterIds![0])?.icon}</div>}
-                            {characters.find(c=>c.id === currentConversation.participantCharacterIds![1]) && <div className="text-2xl w-9 h-9 flex items-center justify-center rounded-full shadow-sm border-2 border-white dark:border-slate-800" style={{backgroundColor: characters.find(c=>c.id === currentConversation.participantCharacterIds![1])?.color || '#A0AEC0'}}>{characters.find(c=>c.id === currentConversation.participantCharacterIds![1])?.icon}</div>}
+                        <div className="flex items-center space-x-2">
+                          {currentCharacterForNormalChat && currentCharacterForNormalChat.useGauges && (
+                            <button onClick={() => setShowGaugesModal(true)} className={`p-2.5 rounded-md hover:${isDarkMode || (lineThemeActive && isLineDark)?'bg-slate-700/70':'bg-slate-200/70'} ${chatHeaderActualTextColor} transition-colors`} title="感情ゲージ">
+                              <FaChartBar size={18} />
+                            </button>
+                          )}
+                          {currentConversation?.isCharToCharConversation && (
+                              <button onClick={toggleAutoReply} className={`p-2.5 rounded-md ${isAutoReplying ? (lineThemeActive && !isLineDark ? 'bg-red-200 text-red-700 hover:bg-red-300' : 'bg-red-500/20 text-red-400 hover:bg-red-500/30') : (lineThemeActive && !isLineDark ? 'bg-green-200 text-green-700 hover:bg-green-300' : 'bg-green-500/20 text-green-400 hover:bg-green-500/30')} transition-colors`} title={isAutoReplying ? "自動会話を停止" : "自動会話を開始/再開"}>
+                                  {isAutoReplying ? <FaStop size={18} /> : <FaPlay size={18} />}
+                              </button>
+                          )}
                         </div>
-                        <h2 className={`text-lg font-semibold truncate ${chatHeaderActualTextColor}`}>{currentConversation.title || "キャラクター同士の会話"}</h2>
-                    </>
-                ) : currentCharacterForNormalChat ? (
-                    <>
-                        <div className="text-2xl mr-3 w-9 h-9 flex items-center justify-center rounded-full shadow-sm flex-shrink-0" style={{backgroundColor: currentCharacterForNormalChat.color || '#A0AEC0'}}>{currentCharacterForNormalChat.icon}</div>
-                        <div className="min-w-0">
-                            <h2 className={`text-lg font-semibold truncate ${chatHeaderActualTextColor}`}>{currentCharacterForNormalChat.name}</h2>
-                            {currentCharacterForNormalChat.useActiveHours && ( <span className={`text-xs font-medium px-1.5 py-0.5 rounded-full ${isCharacterActive(currentCharacterForNormalChat) ? (lineThemeActive && !isLineDark ? 'bg-lime-200 text-lime-700':'bg-green-500/20 text-green-400') : (lineThemeActive && !isLineDark ? 'bg-red-200 text-red-700':'bg-red-500/20 text-red-400')}`}> {isCharacterActive(currentCharacterForNormalChat) ? '● オンライン' : `○ オフライン (${currentCharacterForNormalChat.activeHours.start}:00-${currentCharacterForNormalChat.activeHours.end}:00)`} </span> )}
+                    </div>
+                    <div ref={chatMessagesContainerRef} className={`flex-1 overflow-y-auto space-y-1 scroll-smooth custom-scrollbar ${lineThemeActive ? 'p-4' : 'p-2 sm:p-4'}`} style={{ backgroundColor: chatMessagesListActualBg }}>
+                        {currentConversation && currentConversation.messages.map((msg) => ( <MessageItem key={msg.id} msg={msg} currentChatFontSize={chatFontSize} /> ))}
+                        <div ref={messagesEndRef} />
+                        {!currentConversation && (
+                          <div className="flex flex-col items-center justify-center h-full text-center">
+                            <h2 className={`text-2xl font-bold mb-4 ${generalTextColor}`}>Kintへようこそ</h2>
+                            <p className={`mb-8 ${generalTextColor}`}>始めるには、下のボタンを押してください。</p>
+                            <button
+                              onClick={() => setShowCharacterSelection(true)}
+                              className="px-8 py-4 bg-pink-500 text-white font-bold rounded-lg shadow-lg hover:bg-pink-600 transition-colors"
+                            >
+                              始める
+                            </button>
+                          </div>
+                        )}
+                    </div>
+                    {currentConversation && !currentConversation.isCharToCharConversation && QUICK_MESSAGES.length > 0 && (
+                    <div className={`px-4 pt-2.5 pb-2 border-t ${lineThemeActive ? (isLineDark ? 'border-slate-700' : 'border-transparent') : generalBorderColor} ${isDarkMode || (lineThemeActive && isLineDark)? 'bg-slate-700/80' : (lineThemeActive ? 'bg-sky-100/80' : 'bg-slate-100/80')} backdrop-blur-sm`}>
+                        <div className="flex flex-wrap gap-2"> {QUICK_MESSAGES.slice(0,6).map(qm => ( <button key={qm.id} onClick={() => sendQuickMessage(qm.text)} className={`px-3.5 py-1.5 text-xs rounded-full shadow-sm ${ isDarkMode || (lineThemeActive && isLineDark) ? 'bg-slate-600 hover:bg-slate-500 active:bg-slate-400 text-slate-100' : (lineThemeActive ? 'bg-white hover:bg-slate-50 active:bg-slate-100 text-sky-700 border border-sky-300' : 'bg-white hover:bg-slate-200 active:bg-slate-300 text-slate-700 border border-slate-200') } transition-all duration-150 ease-in-out`}> {qm.text} </button> ))} </div>
+                    </div>
+                    )}
+                    {((currentConversation && !currentConversation.isCharToCharConversation && !currentConversation.isGroupChat && currentCharacterForNormalChat) || (currentConversation && currentConversation.isGroupChat)) && (
+                    <div className={`p-3 border-t ${lineThemeActive ? (isLineDark ? 'border-slate-700' : 'border-sky-200') : generalBorderColor} ${inputBarContainerActualBg} shadow-top-sm`}>
+                      {imageToSend && (
+                        <div className={`mb-2 p-2.5 rounded-lg flex items-center justify-between ${isDarkMode ? 'bg-slate-700' : 'bg-slate-200'}`}>
+                          <div className="flex items-center min-w-0"> <img src={imageToSend.url} alt="Preview" className="w-11 h-11 object-cover rounded-md mr-2.5 shadow-sm flex-shrink-0"/> <span className={`text-sm ${effectiveTextColor} truncate`}>{imageToSend.file.name}</span> </div>
+                          <button onClick={() => setImageToSend(null)} className={`p-1.5 rounded-full hover:${isDarkMode ? 'bg-slate-600' : 'bg-slate-300'} ${effectiveTextColor} transition-colors flex-shrink-0 ml-2`}> <FaTimesCircle size={20}/> </button>
                         </div>
-                    </>
-                ) : (<h2 className={`text-lg font-semibold ${chatHeaderActualTextColor}`}>キャラクターを選択してください</h2>)}
-            </div>
-            <div className="flex items-center space-x-2">
-              {currentCharacterForNormalChat && currentCharacterForNormalChat.useGauges && (
-                <button onClick={() => setShowGaugesModal(true)} className={`p-2.5 rounded-md hover:${isDarkMode || (lineThemeActive && isLineDark)?'bg-slate-700/70':'bg-slate-200/70'} ${chatHeaderActualTextColor} transition-colors`} title="感情ゲージ">
-                  <FaChartBar size={18} />
-                </button>
-              )}
-              {currentConversation?.isCharToCharConversation && (
-                  <button onClick={toggleAutoReply} className={`p-2.5 rounded-md ${isAutoReplying ? (lineThemeActive && !isLineDark ? 'bg-red-200 text-red-700 hover:bg-red-300' : 'bg-red-500/20 text-red-400 hover:bg-red-500/30') : (lineThemeActive && !isLineDark ? 'bg-green-200 text-green-700 hover:bg-green-300' : 'bg-green-500/20 text-green-400 hover:bg-green-500/30')} transition-colors`} title={isAutoReplying ? "自動会話を停止" : "自動会話を開始/再開"}>
-                      {isAutoReplying ? <FaStop size={18} /> : <FaPlay size={18} />}
-                  </button>
-              )}
-            </div>
-          </div>
-           <div ref={chatMessagesContainerRef} className={`flex-1 overflow-y-auto space-y-1 scroll-smooth custom-scrollbar ${lineThemeActive ? 'p-4' : 'p-2 sm:p-4'}`} style={{ backgroundColor: chatMessagesListActualBg }}>
-            {currentConversation && currentConversation.messages.map((msg) => ( <MessageItem key={msg.id} msg={msg} currentChatFontSize={chatFontSize} /> ))}
-            <div ref={messagesEndRef} />
-            {!currentConversation && (
-              <div className="flex flex-col items-center justify-center h-full text-center">
-                <h2 className={`text-2xl font-bold mb-4 ${generalTextColor}`}>Kintへようこそ</h2>
-                <p className={`mb-8 ${generalTextColor}`}>始めるには、下のボタンを押してください。</p>
-                <button
-                  onClick={() => setShowCharacterSelection(true)}
-                  className="px-8 py-4 bg-pink-500 text-white font-bold rounded-lg shadow-lg hover:bg-pink-600 transition-colors"
-                >
-                  始める
-                </button>
-              </div>
+                      )}
+                      <div className={`flex items-center space-x-2 p-1.5 rounded-xl shadow-sm ${inputFieldActualBgColor} border ${inputFieldActualBorderColor}`}>
+                        <button onClick={() => fileInputRef.current?.click()} className={`p-2.5 rounded-lg ${currentModelSupportsImage ? `hover:${isDarkMode ?'bg-slate-600/70':'bg-slate-200/70'} cursor-pointer` : 'opacity-50 cursor-not-allowed'} ${inputFieldActualTextColor} transition-colors`} title={currentModelSupportsImage ? "画像添付" : "現在のモデルは画像に非対応です"} disabled={!currentModelSupportsImage}> <FaPaperclip size={18}/> </button>
+                        <input ref={fileInputRef} id="image-upload-hidden" type="file" accept="image/*" className="hidden" onChange={handleImageFileSelect} disabled={!currentModelSupportsImage}/>
+                        <input type="text" value={input} onChange={(e) => setInput(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && !isSending && sendMessage()} placeholder={currentConversation?.isGroupChat ? 'グループメッセージを送信...' : `${currentCharacterForNormalChat?.name || ''}にメッセージを送信...`} className={`flex-1 px-3 py-2.5 rounded-lg bg-transparent focus:outline-none text-sm sm:text-base ${inputFieldActualTextColor} placeholder-${isDarkMode || (lineThemeActive && isLineDark)?'text-slate-500':'text-slate-400'}`} disabled={isSending} />
+                        {/* Continue conversation button removed from here */}
+                        <button onClick={() => sendMessage()} disabled={isSending || (!input.trim() && !imageToSend) || (imageToSend && !currentModelSupportsImage) } className={`p-3 rounded-lg text-white transition-all duration-150 ease-in-out ${isSending || (!input.trim() && !imageToSend) || (imageToSend && !currentModelSupportsImage) ? (isDarkMode || (lineThemeActive && isLineDark)?'bg-slate-500 cursor-not-allowed':'bg-slate-400 cursor-not-allowed') : (lineThemeActive && !isLineDark ? 'bg-green-500 hover:bg-green-600 active:bg-green-700' : 'bg-indigo-500 hover:bg-indigo-600 active:bg-indigo-700')} shadow-sm`} title="送信"> {isSending ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : <FaPaperPlane size={18}/>} </button>
+                      </div>
+                    </div>
+                    )}
+                </>
             )}
-          </div>
-            {currentConversation && !currentConversation.isCharToCharConversation && QUICK_MESSAGES.length > 0 && (
-            <div className={`px-4 pt-2.5 pb-2 border-t ${lineThemeActive ? (isLineDark ? 'border-slate-700' : 'border-transparent') : generalBorderColor} ${isDarkMode || (lineThemeActive && isLineDark)? 'bg-slate-700/80' : (lineThemeActive ? 'bg-sky-100/80' : 'bg-slate-100/80')} backdrop-blur-sm`}>
-                <div className="flex flex-wrap gap-2"> {QUICK_MESSAGES.slice(0,6).map(qm => ( <button key={qm.id} onClick={() => sendQuickMessage(qm.text)} className={`px-3.5 py-1.5 text-xs rounded-full shadow-sm ${ isDarkMode || (lineThemeActive && isLineDark) ? 'bg-slate-600 hover:bg-slate-500 active:bg-slate-400 text-slate-100' : (lineThemeActive ? 'bg-white hover:bg-slate-50 active:bg-slate-100 text-sky-700 border border-sky-300' : 'bg-white hover:bg-slate-200 active:bg-slate-300 text-slate-700 border border-slate-200') } transition-all duration-150 ease-in-out`}> {qm.text} </button> ))} </div>
-            </div>
-            )}
-          {((currentConversation && !currentConversation.isCharToCharConversation && !currentConversation.isGroupChat && currentCharacterForNormalChat) || (currentConversation && currentConversation.isGroupChat)) && (
-            <div className={`p-3 border-t ${lineThemeActive ? (isLineDark ? 'border-slate-700' : 'border-sky-200') : generalBorderColor} ${inputBarContainerActualBg} shadow-top-sm`}>
-              {imageToSend && (
-                <div className={`mb-2 p-2.5 rounded-lg flex items-center justify-between ${isDarkMode ? 'bg-slate-700' : 'bg-slate-200'}`}>
-                  <div className="flex items-center min-w-0"> <img src={imageToSend.url} alt="Preview" className="w-11 h-11 object-cover rounded-md mr-2.5 shadow-sm flex-shrink-0"/> <span className={`text-sm ${effectiveTextColor} truncate`}>{imageToSend.file.name}</span> </div>
-                  <button onClick={() => setImageToSend(null)} className={`p-1.5 rounded-full hover:${isDarkMode ? 'bg-slate-600' : 'bg-slate-300'} ${effectiveTextColor} transition-colors flex-shrink-0 ml-2`}> <FaTimesCircle size={20}/> </button>
-                </div>
-              )}
-              <div className={`flex items-center space-x-2 p-1.5 rounded-xl shadow-sm ${inputFieldActualBgColor} border ${inputFieldActualBorderColor}`}>
-                <button onClick={() => fileInputRef.current?.click()} className={`p-2.5 rounded-lg ${currentModelSupportsImage ? `hover:${isDarkMode ?'bg-slate-600/70':'bg-slate-200/70'} cursor-pointer` : 'opacity-50 cursor-not-allowed'} ${inputFieldActualTextColor} transition-colors`} title={currentModelSupportsImage ? "画像添付" : "現在のモデルは画像に非対応です"} disabled={!currentModelSupportsImage}> <FaPaperclip size={18}/> </button>
-                <input ref={fileInputRef} id="image-upload-hidden" type="file" accept="image/*" className="hidden" onChange={handleImageFileSelect} disabled={!currentModelSupportsImage}/>
-                <input type="text" value={input} onChange={(e) => setInput(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && !isSending && sendMessage()} placeholder={currentConversation?.isGroupChat ? 'グループメッセージを送信...' : `${currentCharacterForNormalChat?.name || ''}にメッセージを送信...`} className={`flex-1 px-3 py-2.5 rounded-lg bg-transparent focus:outline-none text-sm sm:text-base ${inputFieldActualTextColor} placeholder-${isDarkMode || (lineThemeActive && isLineDark)?'text-slate-500':'text-slate-400'}`} disabled={isSending} />
-                {/* Continue conversation button removed from here */}
-                <button onClick={() => sendMessage()} disabled={isSending || (!input.trim() && !imageToSend) || (imageToSend && !currentModelSupportsImage) } className={`p-3 rounded-lg text-white transition-all duration-150 ease-in-out ${isSending || (!input.trim() && !imageToSend) || (imageToSend && !currentModelSupportsImage) ? (isDarkMode || (lineThemeActive && isLineDark)?'bg-slate-500 cursor-not-allowed':'bg-slate-400 cursor-not-allowed') : (lineThemeActive && !isLineDark ? 'bg-green-500 hover:bg-green-600 active:bg-green-700' : 'bg-indigo-500 hover:bg-indigo-600 active:bg-indigo-700')} shadow-sm`} title="送信"> {isSending ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : <FaPaperPlane size={18}/>} </button>
-              </div>
-            </div>
-          )}
         </div>
       </div>
 
