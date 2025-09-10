@@ -67,6 +67,7 @@ const AIEditModal: React.FC<AIEditModalProps> = ({ isOpen, onClose, character, o
   if (!isOpen) return null;
 
   const renderDiff = (original: any, changed: any) => {
+    if (!original) return null; // GUARD CLAUSE for the crash
     return Object.keys(original).map(key => {
       if (key === 'name' || key === 'description' || key === 'systemPrompt') {
         const originalValue = original[key as keyof Character];

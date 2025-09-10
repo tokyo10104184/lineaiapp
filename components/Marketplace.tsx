@@ -5,7 +5,7 @@ import { Character } from '../lib/types'; // Using full Character type for now
 // A type for the card, which might have a subset of full character data
 export type PublicCharacterCard = Pick<Character, 'id' | 'name' | 'description' | 'icon' | 'color' | 'use_gauges'> & {
   likes_count?: number;
-  profiles: { username: string } | null;
+  username: string | null;
 };
 
 
@@ -67,10 +67,10 @@ const Marketplace: React.FC<MarketplaceProps> = ({ onImport, isDarkMode }) => {
                                 </div>
                                 <div className="min-w-0">
                                     <h3 className="font-bold text-lg truncate">{char.name}</h3>
-                                    {char.profiles?.username && (
+                                    {char.username && (
                                         <p className="text-xs opacity-60 flex items-center mt-1">
                                             <FaUser className="mr-1.5" />
-                                            {char.profiles.username}
+                                            {char.username}
                                         </p>
                                     )}
                                     <p className="text-sm opacity-80 mt-2 line-clamp-3">{char.description}</p>

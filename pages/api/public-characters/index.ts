@@ -7,10 +7,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method === 'GET') {
     // Fetch all public characters
     try {
-      const { data, error } = await supabase
-        .from('public_characters')
-        .select('id, name, description, icon, color, use_gauges, likes_count, profiles(username)')
-        .order('created_at', { ascending: false });
+      // Call the RPC function
+      const { data, error } = await supabase.rpc('get_public_characters_with_author');
 
       if (error) {
         console.error('Supabase GET error:', error);
