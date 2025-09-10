@@ -24,6 +24,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   } else if (req.method === 'POST') {
     // Create a new public character
     try {
+      console.log("Received body for POST:", JSON.stringify(req.body, null, 2));
       // Note the camelCase from the request body
       const { name, description, systemPrompt, color, icon, useGauges, gauges } = req.body;
 
