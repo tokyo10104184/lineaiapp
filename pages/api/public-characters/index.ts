@@ -23,7 +23,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       res.status(500).json({ error: error.message });
     }
   } else if (req.method === 'POST') {
-    // Create a new public character
+    // Create or update a public character
     try {
       const { data: { user } } = await supabase.auth.getUser();
 
@@ -31,14 +31,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(401).json({ error: 'Unauthorized: You must be logged in to publish a character.' });
       }
 
-      const { name, description, systemPrompt, color, icon, useGauges, gauges, id: characterId } = req.body;
+      const { name, description, systemPrompt, color, icon, useGauges, gauges, public_id } = req.body;
 
       if (!name || !systemPrompt) {
         return res.status(400).json({ error: 'Name and system_prompt are required.' });
       }
 
       const characterToUpsert = {
-        id: characterId, // Pass the client-generated ID
+        id: public_id, // This is the public UUID, will be undefined on first publish
         author_id: user.id,
         name,
         description,
@@ -49,11 +49,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         gauges,
       };
 
-      // Use upsert to handle both creation of new characters and updates of existing ones
       const { data, error } = await supabase
         .from('public_characters')
         .upsert(characterToUpsert)
-        .select();
+        .select()
+        .single(); // We expect one record back
 
       if (error) {
         console.error('Supabase POST (upsert) error:', error);

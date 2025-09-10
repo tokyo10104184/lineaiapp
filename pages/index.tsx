@@ -513,26 +513,38 @@ export default function Home() {
     if (character.isPublic) {
       if (!session) {
         alert('キャラクターを公開するにはログインが必要です。');
-        return;
-      }
+        // We'll still add the character locally, but not publish.
+      } else {
         try {
+            const publicCharacterPayload = { ...character, id: character.public_id };
+
             const response = await fetch('/api/public-characters', {
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/json',
                   'Authorization': `Bearer ${session.access_token}`,
                 },
-                body: JSON.stringify(character),
+                body: JSON.stringify(publicCharacterPayload),
             });
+
             if (!response.ok) {
                 const errorData = await response.json();
                 throw new Error(errorData.error || 'Failed to publish character');
             }
-            console.log('Character published successfully!');
+
+            const publishedCharacter = await response.json();
+            // Update the local character with the public_id from the database
+            character.public_id = publishedCharacter.id;
+
+            console.log('Character published successfully!', publishedCharacter);
+
         } catch (error) {
             console.error(error);
             alert(`キャラクターの公開に失敗しました: ${(error as Error).message}`);
+            // Don't add the character locally if publishing fails, to avoid inconsistency.
+            return;
         }
+      }
     }
 
     setCharacters(prev => [character, ...prev]);
@@ -548,34 +560,48 @@ export default function Home() {
       systemPrompt: editingCharacter.systemPrompt || generateSystemPrompt(editingCharacter.name, charDescription),
     };
 
-    if (updatedCharacterData.isPublic) {
+    // This variable will hold the final character data to be set in the state
+    let finalCharacterData = { ...updatedCharacterData };
+
+    if (finalCharacterData.isPublic) {
       if (!session) {
-        alert('キャラクターを公開するにはログインが必要です。');
-        // Optionally, don't block the local save if user isn't logged in.
-        // For now, we'll just alert and proceed with local save.
+        alert('キャラクターを公開するにはログインが必要です。公開設定はオフのまま保存されます。');
+        finalCharacterData.isPublic = false; // Uncheck isPublic if not logged in
       } else {
         try {
+            // Use public_id for the 'id' field in the payload
+            const publicCharacterPayload = { ...finalCharacterData, id: finalCharacterData.public_id };
+
             const response = await fetch('/api/public-characters', {
                 method: 'POST', // The API route handles this via upsert
                 headers: {
                   'Content-Type': 'application/json',
                   'Authorization': `Bearer ${session.access_token}`,
                 },
-                body: JSON.stringify(updatedCharacterData),
+                body: JSON.stringify(publicCharacterPayload),
             });
+
             if (!response.ok) {
                 const errorData = await response.json();
                 throw new Error(errorData.error || 'Failed to publish character');
             }
-            console.log('Character updated and published successfully!');
+
+            const publishedCharacter = await response.json();
+            // Update the character data with the returned public_id
+            finalCharacterData.public_id = publishedCharacter.id;
+
+            console.log('Character updated and published successfully!', publishedCharacter);
+
         } catch (error) {
             console.error(error);
             alert(`キャラクターの公開/更新に失敗しました: ${(error as Error).message}`);
+            // If publishing fails, we can decide to either save locally without the public flag
+            // or block the save entirely. For now, we'll just alert.
         }
       }
     }
 
-    setCharacters(prev => prev.map(char => char.id === updatedCharacterData.id ? updatedCharacterData : char));
+    setCharacters(prev => prev.map(char => char.id === finalCharacterData.id ? finalCharacterData : char));
     setEditingCharacter(null); setShowCharacterDialog(false);
   }, [editingCharacter, generateSystemPrompt]);
 
