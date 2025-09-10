@@ -8,39 +8,55 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     try {
       const { data, error } = await supabase
         .from('public_characters')
-        .select('id, name, description, icon, color, use_gauges') // Select a subset of fields for the list view
+        .select('id, name, description, icon, color, use_gauges, likes_count') // Select a subset of fields for the list view
         .order('created_at', { ascending: false });
 
       if (error) {
+        console.error('Supabase GET error:', error);
         throw error;
       }
 
       res.status(200).json(data);
     } catch (error: any) {
+      console.error('API GET /public-characters error:', error);
       res.status(500).json({ error: error.message });
     }
   } else if (req.method === 'POST') {
     // Create a new public character
     try {
-      const { name, description, system_prompt, color, icon, use_gauges, gauges } = req.body as Character;
+      // Note the camelCase from the request body
+      const { name, description, systemPrompt, color, icon, useGauges, gauges } = req.body;
 
       // Basic validation
-      if (!name || !system_prompt) {
+      if (!name || !systemPrompt) {
         return res.status(400).json({ error: 'Name and system_prompt are required.' });
       }
 
+      // Map from camelCase (JS) to snake_case (DB)
+      const characterToInsert = {
+        name,
+        description,
+        system_prompt: systemPrompt,
+        color,
+        icon,
+        use_gauges: useGauges,
+        gauges,
+      };
+
       const { data, error } = await supabase
         .from('public_characters')
-        .insert([{ name, description, system_prompt, color, icon, use_gauges, gauges }])
+        .insert([characterToInsert])
         .select();
 
       if (error) {
+        console.error('Supabase POST error:', error);
         throw error;
       }
 
       res.status(201).json(data);
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+        console.error('API POST /public-characters error:', error);
+        res.status(500).json({ error: error.message });
     }
   } else {
     res.setHeader('Allow', ['GET', 'POST']);
