@@ -1938,7 +1938,7 @@ export default function Home() {
           </div>
 
           <div className={`p-2 border-b ${sidebarActualBorderColor}`}>
-            <UserMenu onLoginClick={() => setIsAuthModalOpen(true)} />
+            {!isAuthModalOpen && <UserMenu onLoginClick={() => setIsAuthModalOpen(true)} />}
           </div>
 
           <div className={`p-4 border-b ${sidebarActualBorderColor}`}>
@@ -2041,21 +2041,17 @@ export default function Home() {
         </div>
 
         <div className="flex-1 flex flex-col overflow-hidden">
-            {viewMode === 'marketplace' ? (
-                <Marketplace
-                    isDarkMode={isDarkMode}
-                    onImport={handleImportCharacter}
-                />
-            ) : (
-                <>
-                    <div className={`p-4 border-b flex items-center justify-between shadow-sm ${chatHeaderActualBgClass} ${lineThemeActive ? (isLineDark ? 'border-slate-700' : 'border-transparent') : generalBorderColor }`} style={chatHeaderActualBgStyle} >
-                        <div className="flex items-center min-w-0">
-                            <button onClick={() => setSidebarOpen(!sidebarOpen)} className={`lg:hidden mr-3 p-2.5 rounded-md hover:${isDarkMode || (lineThemeActive && isLineDark)?'bg-slate-700/70':'bg-slate-200/70'} ${chatHeaderActualTextColor} transition-colors`} title="メニューを開閉"> <FaBars size={18} /> </button>
+            {/* --- Main Header --- */}
+            <div className={`p-4 border-b flex items-center justify-between shadow-sm ${chatHeaderActualBgClass} ${lineThemeActive ? (isLineDark ? 'border-slate-700' : 'border-transparent') : generalBorderColor }`} style={chatHeaderActualBgStyle} >
+                <div className="flex items-center min-w-0">
+                    <button onClick={() => setSidebarOpen(!sidebarOpen)} className={`lg:hidden mr-3 p-2.5 rounded-md hover:${isDarkMode || (lineThemeActive && isLineDark)?'bg-slate-700/70':'bg-slate-200/70'} ${chatHeaderActualTextColor} transition-colors`} title="メニューを開閉"> <FaBars size={18} /> </button>
 
-                            {currentConversation && currentConversation.isGroupChat && currentConversation.groupParticipantIds ? (
-                                <>
-                                    <div className="flex -space-x-3 mr-3">
-                                        {currentConversation.groupParticipantIds.slice(0, 5).map(id => {
+                    {viewMode === 'marketplace' ? (
+                        <h2 className={`text-lg font-semibold truncate ${chatHeaderActualTextColor}`}>キャラクター広場</h2>
+                    ) : currentConversation && currentConversation.isGroupChat && currentConversation.groupParticipantIds ? (
+                        <>
+                            <div className="flex -space-x-3 mr-3">
+                                {currentConversation.groupParticipantIds.slice(0, 5).map(id => {
                                             const char = characters.find(c => c.id === id);
                                             if (!char) return null;
                                             return (
@@ -2088,18 +2084,27 @@ export default function Home() {
                             ) : (<h2 className={`text-lg font-semibold ${chatHeaderActualTextColor}`}>キャラクターを選択してください</h2>)}
                         </div>
                         <div className="flex items-center space-x-2">
-                          {currentCharacterForNormalChat && currentCharacterForNormalChat.useGauges && (
+                          {viewMode === 'chat' && currentCharacterForNormalChat && currentCharacterForNormalChat.useGauges && (
                             <button onClick={() => setShowGaugesModal(true)} className={`p-2.5 rounded-md hover:${isDarkMode || (lineThemeActive && isLineDark)?'bg-slate-700/70':'bg-slate-200/70'} ${chatHeaderActualTextColor} transition-colors`} title="感情ゲージ">
                               <FaChartBar size={18} />
                             </button>
                           )}
-                          {currentConversation?.isCharToCharConversation && (
+                          {viewMode === 'chat' && currentConversation?.isCharToCharConversation && (
                               <button onClick={toggleAutoReply} className={`p-2.5 rounded-md ${isAutoReplying ? (lineThemeActive && !isLineDark ? 'bg-red-200 text-red-700 hover:bg-red-300' : 'bg-red-500/20 text-red-400 hover:bg-red-500/30') : (lineThemeActive && !isLineDark ? 'bg-green-200 text-green-700 hover:bg-green-300' : 'bg-green-500/20 text-green-400 hover:bg-green-500/30')} transition-colors`} title={isAutoReplying ? "自動会話を停止" : "自動会話を開始/再開"}>
                                   {isAutoReplying ? <FaStop size={18} /> : <FaPlay size={18} />}
                               </button>
                           )}
                         </div>
                     </div>
+
+            {/* --- Main Content Area --- */}
+            {viewMode === 'marketplace' ? (
+                <Marketplace
+                    isDarkMode={isDarkMode}
+                    onImport={handleImportCharacter}
+                />
+            ) : (
+                <>
                     <div ref={chatMessagesContainerRef} className={`flex-1 overflow-y-auto space-y-1 scroll-smooth custom-scrollbar ${lineThemeActive ? 'p-4' : 'p-2 sm:p-4'}`} style={{ backgroundColor: chatMessagesListActualBg }}>
                         {currentConversation && currentConversation.messages.map((msg) => ( <MessageItem key={msg.id} msg={msg} currentChatFontSize={chatFontSize} /> ))}
                         <div ref={messagesEndRef} />
