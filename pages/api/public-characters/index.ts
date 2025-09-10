@@ -1,14 +1,15 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { supabase } from '../../../lib/supabaseClient';
-import { Character } from '../../../lib/types';
+import { createSupabaseServerClient } from '../../../lib/supabaseServer';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  const supabase = createSupabaseServerClient(req, res);
+
   if (req.method === 'GET') {
     // Fetch all public characters
     try {
       const { data, error } = await supabase
         .from('public_characters')
-        .select('id, name, description, icon, color, use_gauges, likes_count') // Select a subset of fields for the list view
+        .select('id, name, description, icon, color, use_gauges, likes_count')
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -24,17 +25,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   } else if (req.method === 'POST') {
     // Create a new public character
     try {
-      console.log("Received body for POST:", JSON.stringify(req.body, null, 2));
-      // Note the camelCase from the request body
-      const { name, description, systemPrompt, color, icon, useGauges, gauges } = req.body;
+      const { data: { user } } = await supabase.auth.getUser();
 
-      // Basic validation
+      if (!user) {
+        return res.status(401).json({ error: 'Unauthorized: You must be logged in to publish a character.' });
+      }
+
+      const { name, description, systemPrompt, color, icon, useGauges, gauges, id: characterId } = req.body;
+
       if (!name || !systemPrompt) {
         return res.status(400).json({ error: 'Name and system_prompt are required.' });
       }
 
-      // Map from camelCase (JS) to snake_case (DB)
-      const characterToInsert = {
+      const characterToUpsert = {
+        id: characterId, // Pass the client-generated ID
+        author_id: user.id,
         name,
         description,
         system_prompt: systemPrompt,
@@ -44,13 +49,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         gauges,
       };
 
+      // Use upsert to handle both creation of new characters and updates of existing ones
       const { data, error } = await supabase
         .from('public_characters')
-        .insert([characterToInsert])
+        .upsert(characterToUpsert)
         .select();
 
       if (error) {
-        console.error('Supabase POST error:', error);
+        console.error('Supabase POST (upsert) error:', error);
         throw error;
       }
 

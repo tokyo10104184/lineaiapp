@@ -8,10 +8,14 @@ import {
 import ConfirmationDialog from '../components/ui/ConfirmationDialog'; // Added import
 import GroupChatCreationModal from '../components/GroupChatCreationModal';
 import CharacterSelectionModal from '../components/CharacterSelectionModal';
+import NewCharacterChoiceModal from '../components/NewCharacterChoiceModal';
 import SettingsModal from '../components/SettingsModal';
 import GaugesModal from '../components/GaugesModal';
 import QuickCreateCharacterModal, { CreatorPersona } from '../components/QuickCreateCharacterModal';
 import Marketplace from '../components/Marketplace';
+import AuthModal from '../components/AuthModal';
+import UserMenu from '../components/UserMenu';
+import { useAuth } from '../src/contexts/AuthContext';
 import { FORMATTING_INSTRUCTIONS_PROMPT, CREATOR_PERSONA_PROMPTS } from '../lib/prompts';
 import { Message, Character, Conversation, ChutesApiRequestBody, EmotionGauges } from '../lib/types';
 
@@ -93,6 +97,7 @@ const cleanAIReply = (reply: string): string => {
 
 
 export default function Home() {
+  const { session } = useAuth();
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [currentConversationId, setCurrentConversationId] = useState<string>('')
   const [input, setInput] = useState('')
@@ -148,6 +153,8 @@ export default function Home() {
   const [showGaugesModal, setShowGaugesModal] = useState(false);
   const [showQuickCreateModal, setShowQuickCreateModal] = useState(false);
   const [viewMode, setViewMode] = useState<'chat' | 'marketplace'>('chat');
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [showNewCharacterChoiceModal, setShowNewCharacterChoiceModal] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const chatMessagesContainerRef = useRef<HTMLDivElement>(null)
@@ -504,19 +511,27 @@ export default function Home() {
     };
 
     if (character.isPublic) {
+      if (!session) {
+        alert('キャラクターを公開するにはログインが必要です。');
+        return;
+      }
         try {
             const response = await fetch('/api/public-characters', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${session.access_token}`,
+                },
                 body: JSON.stringify(character),
             });
             if (!response.ok) {
-                throw new Error('Failed to publish character');
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Failed to publish character');
             }
             console.log('Character published successfully!');
         } catch (error) {
             console.error(error);
-            alert('キャラクターの公開に失敗しました。');
+            alert(`キャラクターの公開に失敗しました: ${(error as Error).message}`);
         }
     }
 
@@ -534,20 +549,30 @@ export default function Home() {
     };
 
     if (updatedCharacterData.isPublic) {
+      if (!session) {
+        alert('キャラクターを公開するにはログインが必要です。');
+        // Optionally, don't block the local save if user isn't logged in.
+        // For now, we'll just alert and proceed with local save.
+      } else {
         try {
             const response = await fetch('/api/public-characters', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                method: 'POST', // The API route handles this via upsert
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${session.access_token}`,
+                },
                 body: JSON.stringify(updatedCharacterData),
             });
             if (!response.ok) {
-                throw new Error('Failed to publish character');
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Failed to publish character');
             }
-            console.log('Character published successfully!');
+            console.log('Character updated and published successfully!');
         } catch (error) {
             console.error(error);
-            alert('キャラクターの公開に失敗しました。');
+            alert(`キャラクターの公開/更新に失敗しました: ${(error as Error).message}`);
         }
+      }
     }
 
     setCharacters(prev => prev.map(char => char.id === updatedCharacterData.id ? updatedCharacterData : char));
@@ -1789,6 +1814,20 @@ export default function Home() {
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet" />
       </Head>
 
+      <AuthModal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} />
+
+      <NewCharacterChoiceModal
+        isOpen={showNewCharacterChoiceModal}
+        onClose={() => setShowNewCharacterChoiceModal(false)}
+        onManualCreate={() => {
+          setEditingCharacter(null);
+          setNewCharacter({ name: '', description: '', systemPrompt: '', color: '#6366f1', activeHours: { start: 0, end: 23 }, useActiveHours: false, icon: '👤', isPublic: false, gauges: DEFAULT_GAUGES, useGauges: true });
+          setShowCharacterDialog(true);
+        }}
+        onQuickCreate={() => setShowQuickCreateModal(true)}
+        isDarkMode={isDarkMode}
+      />
+
       {showCharacterSelection && (
         <CharacterSelectionModal
           isOpen={showCharacterSelection}
@@ -1898,6 +1937,10 @@ export default function Home() {
             </div>
           </div>
 
+          <div className={`p-2 border-b ${sidebarActualBorderColor}`}>
+            <UserMenu onLoginClick={() => setIsAuthModalOpen(true)} />
+          </div>
+
           <div className={`p-4 border-b ${sidebarActualBorderColor}`}>
             <div className="flex justify-between items-center mb-3.5">
               <h3 className={`font-semibold text-lg ${sidebarActualTextColor}`}>会話履歴</h3>
@@ -1954,7 +1997,7 @@ export default function Home() {
           <div className={`p-4 border-b ${sidebarActualBorderColor}`}>
             <div className="flex justify-between items-center mb-3.5">
               <h3 className={`font-semibold text-lg ${sidebarActualTextColor}`}>キャラクター</h3>
-              <button onClick={() => { setEditingCharacter(null); setNewCharacter({ name: '', description: '', systemPrompt: '', color: '#6366f1', activeHours: { start: 0, end: 23 }, useActiveHours: false, icon: '👤', isPublic: false }); setShowCharacterDialog(true); }} className={`p-2 text-white rounded-full transition-all duration-150 bg-green-500 hover:bg-green-600 active:bg-green-700 shadow-md`} title="新しいキャラクター"> <FaPlus size={14} /> </button>
+              <button onClick={() => setShowNewCharacterChoiceModal(true)} className={`p-2 text-white rounded-full transition-all duration-150 bg-green-500 hover:bg-green-600 active:bg-green-700 shadow-md`} title="新しいキャラクター"> <FaPlus size={14} /> </button>
             </div>
             <div className="space-y-1.5 max-h-40 md:max-h-52 lg:max-h-40 overflow-y-auto pr-1 custom-scrollbar">
               {characters.map(char => (
