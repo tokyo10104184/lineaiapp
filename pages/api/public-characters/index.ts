@@ -6,7 +6,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   if (req.method === 'GET') {
     try {
-      const { data, error } = await supabase.rpc('get_public_characters_with_author');
+      const { sort_by = 'newest' } = req.query;
+      const { data, error } = await supabase.rpc('get_public_characters_with_author', {
+        sort_by: sort_by as string
+      });
       if (error) {
         console.error('Supabase GET RPC error:', error);
         throw error;

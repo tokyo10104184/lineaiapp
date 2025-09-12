@@ -4,7 +4,7 @@ import {
     FaUserCircle, FaImage, FaPlus, FaEdit, FaTimes, FaRobot, FaTrash, FaPaperPlane,
     FaBars, FaQuestionCircle, FaPaperclip, FaTimesCircle, FaQuoteLeft, FaComments,
     FaPlay, FaStop, FaFistRaised, FaBalanceScale, FaCommentDots, FaSave, FaUndo, FaUsers, FaCog, FaChartBar, FaStore, FaMagic,
-    FaCloudUploadAlt, FaCloudDownloadAlt
+    FaCloudUploadAlt, FaCloudDownloadAlt, FaBrain
 } from 'react-icons/fa';
 import ConfirmationDialog from '../components/ui/ConfirmationDialog'; // Added import
 import GroupChatCreationModal from '../components/GroupChatCreationModal';
@@ -130,6 +130,7 @@ export default function Home() {
   const [chatFontSize, setChatFontSize] = useState('text-sm'); // Added state for chat font size
   const [allowAICustomTextColor, setAllowAICustomTextColor] = useState(true); // Renamed, default true
   const [cheatMode, setCheatMode] = useState(true); // Added for gauge editing
+  const [useMemory, setUseMemory] = useState(false); // For long-term memory feature
 
   const [showCharToCharSelectModal, setShowCharToCharSelectModal] = useState(false);
   const [charToCharCandidates, setCharToCharCandidates] = useState<[string | null, string | null]>([null, null]);
@@ -144,6 +145,7 @@ export default function Home() {
   const [editingMessageText, setEditingMessageText] = useState<string>('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [publishingCharacterId, setPublishingCharacterId] = useState<string | null>(null);
+  const [isSavingMemory, setIsSavingMemory] = useState(false);
 
   const [showDeleteConversationDialog, setShowDeleteConversationDialog] = useState(false);
   const [conversationToDeleteId, setConversationToDeleteId] = useState<string | null>(null);
@@ -234,6 +236,7 @@ export default function Home() {
         setChatFontSize(data.chatFontSize || 'text-sm');
         setAllowAICustomTextColor(data.allowAICustomTextColor === undefined ? true : data.allowAICustomTextColor);
         setCheatMode(data.cheatMode === undefined ? true : data.cheatMode);
+        setUseMemory(data.useMemory === undefined ? false : data.useMemory);
       } else {
         // Set default settings for a fresh start
         setBackgroundColor(Object.keys(LIGHT_MODE_CHAT_BACKGROUNDS)[0]);
@@ -325,11 +328,11 @@ export default function Home() {
            lineThemeActive, displayedQuote, isAutoReplying, // showEmotionIcons removed
           chatFontSize, // Save chat font size
            allowAICustomTextColor, // Save new setting
-           cheatMode,
+           cheatMode, useMemory,
         };
         localStorage.setItem('chatAppData', JSON.stringify(data));
     }
-  }, [conversations, characters, currentConversationId, currentCharacterId, backgroundColor, isDarkMode, useCensorship, lineThemeActive, displayedQuote, isAutoReplying, chatFontSize, allowAICustomTextColor, cheatMode]);
+  }, [conversations, characters, currentConversationId, currentCharacterId, backgroundColor, isDarkMode, useCensorship, lineThemeActive, displayedQuote, isAutoReplying, chatFontSize, allowAICustomTextColor, cheatMode, useMemory]);
 
   useEffect(() => {
     const sidebarElement = sidebarRef.current;
@@ -701,6 +704,47 @@ export default function Home() {
     }
   }, [characters, session]);
 
+  const handleSaveMemory = useCallback(async () => {
+    if (!currentConversation || !currentCharacterForNormalChat || !session) {
+      alert('記憶を保存するには、キャラクターとの会話を選択し、ログインしている必要があります。');
+      return;
+    }
+    if (currentConversation.messages.length < 4) { // Need at least a few turns
+      alert('記憶を生成するには、もう少し会話を続けてください。');
+      return;
+    }
+
+    setIsSavingMemory(true);
+    try {
+      const response = await fetch('/api/summarize-conversation', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          messages: currentConversation.messages,
+          model: model,
+          character_id: currentCharacterForNormalChat.id,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to save memory.');
+      }
+
+      const data = await response.json();
+      alert(`記憶を保存しました！\n\n要約:\n${data.summary}`);
+
+    } catch (error) {
+      console.error('Failed to save memory', error);
+      alert(`エラー: ${(error as Error).message}`);
+    } finally {
+      setIsSavingMemory(false);
+    }
+  }, [currentConversation, currentCharacterForNormalChat, session, model]);
+
   const handleImportCharacter = useCallback(async (characterId: string) => {
     if (characters.some(c => c.id === characterId)) {
         alert('このキャラクターは既にインポート済みです。');
@@ -994,11 +1038,31 @@ export default function Home() {
                 };
             });
 
+            let systemPrompt = currentCharacterForNormalChat.systemPrompt;
+
+            // Memory Injection Logic
+            if (useMemory && session && activeConversation.messages.length === 1) {
+              try {
+                const memoryResponse = await fetch(`/api/get-memory?character_id=${currentCharacterForNormalChat.id}`, {
+                  headers: { 'Authorization': `Bearer ${session.access_token}` },
+                });
+                if (memoryResponse.ok) {
+                  const memoryData = await memoryResponse.json();
+                  if (memoryData.memory_summary) {
+                    const memoryPrefix = `あなたはユーザーとの間に以下の記憶を持っています。これを会話に活かしてください。\n--- 記憶 ---\n${memoryData.memory_summary}\n--- 記憶ここまで ---\n\n`;
+                    systemPrompt = memoryPrefix + systemPrompt;
+                  }
+                }
+              } catch (e) {
+                console.error("Failed to fetch memory, proceeding without it.", e);
+              }
+            }
+
             const messagesPayload = [];
             if (currentCharacterForNormalChat.useGauges) {
                 messagesPayload.push({ role: 'system', content: FORMATTING_INSTRUCTIONS_PROMPT });
             }
-            messagesPayload.push({ role: 'system', content: currentCharacterForNormalChat.systemPrompt });
+            messagesPayload.push({ role: 'system', content: systemPrompt });
             messagesPayload.push(...historyForApi);
             const apiRequestBody: ChutesApiRequestBody = { model, messages: messagesPayload, temperature, useCensorship };
             if (isImageMessage && localImageDataUrl && currentModelSupportsImage && !editedMessageId) {
@@ -2203,6 +2267,16 @@ export default function Home() {
                             ) : (<h2 className={`text-lg font-semibold ${chatHeaderActualTextColor}`}>キャラクターを選択してください</h2>)}
                         </div>
                         <div className="flex items-center space-x-2">
+                          {viewMode === 'chat' && currentCharacterForNormalChat && (
+                            <button
+                              onClick={handleSaveMemory}
+                              disabled={isSavingMemory}
+                              className={`p-2.5 rounded-md hover:${isDarkMode || (lineThemeActive && isLineDark)?'bg-slate-700/70':'bg-slate-200/70'} ${chatHeaderActualTextColor} transition-colors disabled:opacity-50 disabled:cursor-not-allowed`}
+                              title="会話の記憶を保存"
+                            >
+                              {isSavingMemory ? <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></div> : <FaBrain size={18} />}
+                            </button>
+                          )}
                           {viewMode === 'chat' && currentCharacterForNormalChat && currentCharacterForNormalChat.useGauges && (
                             <button onClick={() => setShowGaugesModal(true)} className={`p-2.5 rounded-md hover:${isDarkMode || (lineThemeActive && isLineDark)?'bg-slate-700/70':'bg-slate-200/70'} ${chatHeaderActualTextColor} transition-colors`} title="感情ゲージ">
                               <FaChartBar size={18} />

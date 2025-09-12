@@ -26,6 +26,8 @@ interface SettingsModalProps {
   modelOptions: any;
   cheatMode: boolean;
   setCheatMode: (value: boolean) => void;
+  useMemory: boolean;
+  setUseMemory: (value: boolean) => void;
 }
 
 const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -51,6 +53,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   modelOptions,
   cheatMode,
   setCheatMode,
+  useMemory,
+  setUseMemory,
 }) => {
   const { profile } = useAuth();
 
@@ -127,6 +131,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
               description="オフにするとゲージの手動編集が可能になります。"
               enabled={cheatMode}
               onToggle={() => setCheatMode(!cheatMode)}
+            />
+            <ToggleSwitch
+              label="長期記憶機能"
+              description="会話の要点をAIに記憶させ、次回の会話に反映させます。"
+              enabled={useMemory}
+              onToggle={() => setUseMemory(!useMemory)}
             />
           </SettingSection>
 
