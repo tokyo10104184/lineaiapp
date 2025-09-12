@@ -1,5 +1,7 @@
 import React from 'react';
 import { FaTimes } from 'react-icons/fa';
+import { useAuth } from '@/src/contexts/AuthContext';
+import AdminPanel from './AdminPanel';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -50,6 +52,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   cheatMode,
   setCheatMode,
 }) => {
+  const { profile } = useAuth();
+
   if (!isOpen) return null;
 
   const panelBgColor = isDarkMode ? 'bg-slate-800' : 'bg-white';
@@ -164,6 +168,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
               {lineThemeActive && <p className={`text-xs mt-1.5 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>LINE風テーマ有効時は固定されます。</p>}
             </div>
           </SettingSection>
+
+          {profile?.is_admin && (
+            <SettingSection title="管理者">
+              <AdminPanel isDarkMode={isDarkMode} />
+            </SettingSection>
+          )}
         </div>
         <div className="mt-6 pt-4 border-t border-slate-200 dark:border-slate-700">
             <button onClick={onClose} className={`w-full px-6 py-2.5 rounded-lg text-white font-medium bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 transition-colors duration-150 shadow-md`}>

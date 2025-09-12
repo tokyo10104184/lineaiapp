@@ -7,6 +7,7 @@ interface Profile {
   id: string;
   username: string;
   updated_at: string;
+  is_admin: boolean;
 }
 
 // Define the shape of the context data
