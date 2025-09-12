@@ -1,6 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { createSupabaseServerClient } from '../../lib/supabaseServer';
 import { Character } from '../../lib/types';
+import { getAiResponse } from '../../lib/ai'; // Import the shared function
 
 const AI_EDIT_SYSTEM_PROMPT = `You are an expert character designer. Your task is to modify a character's profile based on a user's request.
 You will be given a JSON object representing the current character and a text instruction for the modification.
@@ -38,38 +39,17 @@ Here is my request:
 
 Please provide the complete modified JSON object.`;
 
-        // Re-using the /api/chutes endpoint for the actual AI call
-        const chutesRequestBody = {
+        const aiPayload = {
             model: model,
             messages: [
                 { role: 'system', content: AI_EDIT_SYSTEM_PROMPT },
                 { role: 'user', content: userMessage },
             ],
             temperature: 0.7,
-            useCensorship: false,
         };
 
-        const vercel_url = process.env.VERCEL_URL
-        const protocol = vercel_url?.includes('localhost') ? 'http' : 'https'
-        const baseUrl = vercel_url ? `${protocol}://${vercel_url}` : 'http://localhost:3000'
-
-        const response = await fetch(`${baseUrl}/api/chutes`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                // We might need to forward the auth token if chutes requires it, but let's assume not for now.
-            },
-            body: JSON.stringify(chutesRequestBody),
-        });
-
-        if (!response.ok) {
-            const errorText = await response.text();
-            console.error('Error from /api/chutes:', errorText);
-            return res.status(response.status).json({ error: `Failed to get response from AI model. Details: ${errorText}` });
-        }
-
-        const aiResponse = await response.json();
-        let replyContent = aiResponse.reply;
+        // Call the shared function directly
+        const replyContent = await getAiResponse(aiPayload);
 
         // Clean the response to get only the JSON part
         const jsonMatch = replyContent.match(/\{[\s\S]*\}/);

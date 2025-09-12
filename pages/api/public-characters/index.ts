@@ -5,23 +5,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const supabase = createSupabaseServerClient(req, res);
 
   if (req.method === 'GET') {
-    // Fetch all public characters
     try {
-      // Call the RPC function
       const { data, error } = await supabase.rpc('get_public_characters_with_author');
-
       if (error) {
-        console.error('Supabase GET error:', error);
+        console.error('Supabase GET RPC error:', error);
         throw error;
       }
-
       res.status(200).json(data);
     } catch (error: any) {
       console.error('API GET /public-characters error:', error);
       res.status(500).json({ error: error.message });
     }
   } else if (req.method === 'POST') {
-    // Create or update a public character
     try {
       const { data: { user } } = await supabase.auth.getUser();
 
@@ -29,14 +24,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(401).json({ error: 'Unauthorized: You must be logged in to publish a character.' });
       }
 
-      const { name, description, systemPrompt, color, icon, useGauges, gauges, public_id } = req.body;
+      // The 'id' from the body is the public_id
+      const { name, description, systemPrompt, color, icon, useGauges, gauges, id: public_id } = req.body;
 
       if (!name || !systemPrompt) {
         return res.status(400).json({ error: 'Name and system_prompt are required.' });
       }
 
-      const characterToUpsert = {
-        id: public_id, // This is the public UUID, will be undefined on first publish
+      const characterData = {
         author_id: user.id,
         name,
         description,
@@ -47,11 +42,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         gauges,
       };
 
+      // Conditionally add the id for updates, omit for inserts
+      const characterToUpsert = public_id ? { id: public_id, ...characterData } : characterData;
+
       const { data, error } = await supabase
         .from('public_characters')
         .upsert(characterToUpsert)
         .select()
-        .single(); // We expect one record back
+        .single();
 
       if (error) {
         console.error('Supabase POST (upsert) error:', error);

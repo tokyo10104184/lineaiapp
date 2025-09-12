@@ -3,7 +3,8 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import {
     FaUserCircle, FaImage, FaPlus, FaEdit, FaTimes, FaRobot, FaTrash, FaPaperPlane,
     FaBars, FaQuestionCircle, FaPaperclip, FaTimesCircle, FaQuoteLeft, FaComments,
-    FaPlay, FaStop, FaFistRaised, FaBalanceScale, FaCommentDots, FaSave, FaUndo, FaUsers, FaCog, FaChartBar, FaStore, FaMagic
+    FaPlay, FaStop, FaFistRaised, FaBalanceScale, FaCommentDots, FaSave, FaUndo, FaUsers, FaCog, FaChartBar, FaStore, FaMagic,
+    FaCloudUploadAlt, FaCloudDownloadAlt
 } from 'react-icons/fa';
 import ConfirmationDialog from '../components/ui/ConfirmationDialog'; // Added import
 import GroupChatCreationModal from '../components/GroupChatCreationModal';
@@ -142,6 +143,7 @@ export default function Home() {
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editingMessageText, setEditingMessageText] = useState<string>('');
   const [isGenerating, setIsGenerating] = useState(false);
+  const [publishingCharacterId, setPublishingCharacterId] = useState<string | null>(null);
 
   const [showDeleteConversationDialog, setShowDeleteConversationDialog] = useState(false);
   const [conversationToDeleteId, setConversationToDeleteId] = useState<string | null>(null);
@@ -637,6 +639,67 @@ export default function Home() {
     if (editingCharacter) setEditingCharacter(prev => ({ ...(prev as Character), ...randomValues }));
     else setNewCharacter(prev => ({...prev, ...randomValues}));
   }, [editingCharacter, generateRandomCharacterValues]);
+
+  const handleTogglePublish = useCallback(async (characterId: string) => {
+    if (!session) {
+      alert('キャラクターを公開/非公開にするにはログインが必要です。');
+      return;
+    }
+
+    const character = characters.find(c => c.id === characterId);
+    if (!character) return;
+
+    setPublishingCharacterId(character.id);
+
+    try {
+      if (character.isPublic && character.public_id) {
+        // --- Unpublish ---
+        const response = await fetch('/api/public-characters/publish', {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({ public_id: character.public_id }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to unpublish character');
+        }
+
+        setCharacters(prev => prev.map(c =>
+          c.id === characterId ? { ...c, isPublic: false, public_id: null } : c
+        ));
+
+      } else {
+        // --- Publish ---
+        const response = await fetch('/api/public-characters/publish', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify(character),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to publish character');
+        }
+
+        const publishedCharacter = await response.json();
+        setCharacters(prev => prev.map(c =>
+          c.id === characterId ? { ...c, isPublic: true, public_id: publishedCharacter.id } : c
+        ));
+      }
+    } catch (error) {
+      console.error('Failed to toggle publish state', error);
+      alert(`エラー: ${(error as Error).message}`);
+    } finally {
+      setPublishingCharacterId(null);
+    }
+  }, [characters, session]);
 
   const handleImportCharacter = useCallback(async (characterId: string) => {
     if (characters.some(c => c.id === characterId)) {
@@ -2063,6 +2126,17 @@ export default function Home() {
                     >
                         <FaCommentDots size={13} />
                     </button>
+                    <button
+                        onClick={(e) => { e.stopPropagation(); handleTogglePublish(char.id); }}
+                        disabled={publishingCharacterId === char.id}
+                        className={`p-1.5 rounded-full opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity ${isDarkMode ? 'text-purple-400 hover:text-purple-300 hover:bg-slate-600/50' : 'text-purple-500 hover:text-purple-700 hover:bg-purple-100/70'} disabled:cursor-not-allowed`}
+                        title={char.isPublic ? "非公開にする" : "公開する"}
+                    >
+                        {publishingCharacterId === char.id
+                          ? <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
+                          : (char.isPublic ? <FaCloudDownloadAlt size={13} /> : <FaCloudUploadAlt size={13} />)
+                        }
+                    </button>
                     <button onClick={(e) => { e.stopPropagation(); setEditingCharacter(JSON.parse(JSON.stringify(char))); setShowCharacterDialog(true); }} className={`p-1.5 rounded-full opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity ${isDarkMode ? 'text-slate-400 hover:text-slate-200 hover:bg-slate-600/50' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/70'}`} title="キャラクター編集"> <FaEdit size={13} /> </button>
                     <button onClick={(e) => deleteCharacterCallback(e, char.id)} className={`p-1.5 rounded-full opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity ${isDarkMode ? 'text-red-400 hover:text-red-300 hover:bg-slate-600/50' : 'text-red-500 hover:text-red-600 hover:bg-red-100/70'}`} title="キャラクター削除"> <FaTrash size={13} /> </button>
                   </div>
@@ -2210,7 +2284,6 @@ export default function Home() {
                   <div> <label className="block text-xs font-medium">終了 (0-23時)</label> <input type="number" min="0" max="23" value={editingCharacter ? editingCharacter.activeHours.end : newCharacter.activeHours.end} onChange={(e) => { const val = parseInt(e.target.value); if (editingCharacter) setEditingCharacter({...editingCharacter, activeHours: {...editingCharacter.activeHours, end: val}}); else setNewCharacter({...newCharacter, activeHours: {...newCharacter.activeHours, end: val}}); }} className={`w-full p-2.5 border rounded-lg shadow-sm ${generalInputFieldBgColor} ${generalTextColor} ${generalBorderColor} focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors`} /> </div>
                 </div>
               )}
-              <div className="flex items-center space-x-2 pt-1"> <input type="checkbox" id="isPublicModal" checked={editingCharacter ? editingCharacter.isPublic : newCharacter.isPublic} onChange={(e) => editingCharacter ? setEditingCharacter({...editingCharacter, isPublic: e.target.checked}) : setNewCharacter({...newCharacter, isPublic: e.target.checked})} className="h-4 w-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500 cursor-pointer" /> <label htmlFor="isPublicModal" className="text-sm cursor-pointer select-none">公開キャラクター (将来用)</label> </div>
               <div className="flex items-center space-x-2 pt-1"> <input type="checkbox" id="useGaugesModal" checked={editingCharacter ? editingCharacter.useGauges : newCharacter.useGauges} onChange={(e) => editingCharacter ? setEditingCharacter({...editingCharacter, useGauges: e.target.checked}) : setNewCharacter({...newCharacter, useGauges: e.target.checked})} className="h-4 w-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500 cursor-pointer" /> <label htmlFor="useGaugesModal" className="text-sm cursor-pointer select-none">感情ゲージを使用する</label> </div>
             </div>
             <div className="mt-6 flex flex-col sm:flex-row justify-between items-center gap-3">
