@@ -28,6 +28,8 @@ interface SettingsModalProps {
   setCheatMode: (value: boolean) => void;
   useMemory: boolean;
   setUseMemory: (value: boolean) => void;
+  showDebugConsole: boolean;
+  setShowDebugConsole: (value: boolean) => void;
 }
 
 const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -55,6 +57,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   setCheatMode,
   useMemory,
   setUseMemory,
+  showDebugConsole,
+  setShowDebugConsole,
 }) => {
   const { profile } = useAuth();
 
@@ -181,6 +185,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
           {profile?.is_admin && (
             <SettingSection title="管理者">
+              <ToggleSwitch
+                label="デバッグコンソールを表示"
+                description="画面上にコンソールを表示して、エラーメッセージを確認します。"
+                enabled={showDebugConsole}
+                onToggle={() => setShowDebugConsole(!showDebugConsole)}
+              />
               <AdminPanel isDarkMode={isDarkMode} />
             </SettingSection>
           )}

@@ -12,6 +12,7 @@ import CharacterSelectionModal from '../components/CharacterSelectionModal';
 import NewCharacterChoiceModal from '../components/NewCharacterChoiceModal';
 import AIEditModal from '../components/AIEditModal';
 import SettingsModal from '../components/SettingsModal';
+import OnScreenConsole from '../components/OnScreenConsole';
 import GaugesModal from '../components/GaugesModal';
 import QuickCreateCharacterModal, { CreatorPersona } from '../components/QuickCreateCharacterModal';
 import Marketplace from '../components/Marketplace';
@@ -161,6 +162,7 @@ export default function Home() {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [showNewCharacterChoiceModal, setShowNewCharacterChoiceModal] = useState(false);
   const [isAIEditModalOpen, setIsAIEditModalOpen] = useState(false);
+  const [showDebugConsole, setShowDebugConsole] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const chatMessagesContainerRef = useRef<HTMLDivElement>(null)
@@ -2058,6 +2060,8 @@ export default function Home() {
           isDarkMode={isDarkMode}
         />
       )}
+
+      {showDebugConsole && <OnScreenConsole />}
 
       <SettingsModal
         isOpen={showSettingsModal}
