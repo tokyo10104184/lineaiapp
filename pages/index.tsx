@@ -755,8 +755,8 @@ export default function Home() {
 
     try {
       const fileExt = file.name.split('.').pop();
-      const fileName = `${user.id}-${Date.now()}.${fileExt}`;
-      const filePath = `${fileName}`;
+      const fileName = `${Date.now()}.${fileExt}`;
+      const filePath = `${session.user.id}/${fileName}`;
 
       const { error: uploadError } = await supabase.storage
         .from('character-icons')
