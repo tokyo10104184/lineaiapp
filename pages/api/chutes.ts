@@ -1,4 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
+import { getAiResponse } from '../../lib/ai';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
@@ -6,49 +7,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return;
   }
 
-  const { messages, model, temperature = 0.7, useCensorship, imageDataUrl } = req.body;
-
-  if (!messages || !model) {
-    return res.status(400).json({ error: 'messages and model are required' });
-  }
-
-  const siteUrl = "http://localhost:3000";
-  const siteName = "My Chat App";
-
   try {
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
-        "Content-Type": "application/json",
-        "HTTP-Referer": siteUrl,
-        "X-Title": siteName,
-      },
-      body: JSON.stringify({
-        model: model,
-        messages: messages,
-        temperature: temperature,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("OpenRouter API Error:", response.status, errorText);
-      return res.status(response.status).json({ error: `APIエラーが発生しました: ${errorText}` });
-    }
-
-    const data = await response.json();
-    const reply = data.choices[0]?.message?.content;
-
-    if (!reply) {
-      console.error("APIから返信がありません:", data);
-      return res.status(500).json({ error: "APIから返信がありませんでした。" });
-    }
-    
+    const reply = await getAiResponse(req.body);
     res.status(200).json({ reply: reply });
-
-  } catch (error) {
-    console.error("API呼び出し中のエラー:", error);
-    res.status(500).json({ error: "内部サーバーエラーが発生しました。" });
+  } catch (error: any) {
+    // The error is already logged in the shared function, but we can log it here too if needed.
+    res.status(500).json({ error: error.message || "内部サーバーエラーが発生しました。" });
   }
 }

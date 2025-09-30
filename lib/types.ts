@@ -22,7 +22,8 @@ export interface EmotionGauges {
 }
 
 export interface Character {
-  id: string
+  id: string; // Local ID
+  public_id?: string | null; // DB UUID for public characters
   name: string
   description: string
   systemPrompt: string

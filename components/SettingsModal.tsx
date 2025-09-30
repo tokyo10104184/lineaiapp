@@ -1,5 +1,7 @@
 import React from 'react';
 import { FaTimes } from 'react-icons/fa';
+import { useAuth } from '@/src/contexts/AuthContext';
+import AdminPanel from './AdminPanel';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -24,6 +26,8 @@ interface SettingsModalProps {
   modelOptions: any;
   cheatMode: boolean;
   setCheatMode: (value: boolean) => void;
+  useMemory: boolean;
+  setUseMemory: (value: boolean) => void;
 }
 
 const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -49,7 +53,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   modelOptions,
   cheatMode,
   setCheatMode,
+  useMemory,
+  setUseMemory,
 }) => {
+  const { profile } = useAuth();
+
   if (!isOpen) return null;
 
   const panelBgColor = isDarkMode ? 'bg-slate-800' : 'bg-white';
@@ -124,6 +132,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
               enabled={cheatMode}
               onToggle={() => setCheatMode(!cheatMode)}
             />
+            <ToggleSwitch
+              label="長期記憶機能"
+              description="会話の要点をAIに記憶させ、次回の会話に反映させます。"
+              enabled={useMemory}
+              onToggle={() => setUseMemory(!useMemory)}
+            />
           </SettingSection>
 
           <SettingSection title="表示設定">
@@ -164,6 +178,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
               {lineThemeActive && <p className={`text-xs mt-1.5 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>LINE風テーマ有効時は固定されます。</p>}
             </div>
           </SettingSection>
+
+          {profile?.is_admin && (
+            <SettingSection title="管理者">
+              <AdminPanel isDarkMode={isDarkMode} />
+            </SettingSection>
+          )}
         </div>
         <div className="mt-6 pt-4 border-t border-slate-200 dark:border-slate-700">
             <button onClick={onClose} className={`w-full px-6 py-2.5 rounded-lg text-white font-medium bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 transition-colors duration-150 shadow-md`}>

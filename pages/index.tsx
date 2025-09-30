@@ -3,14 +3,22 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import {
     FaUserCircle, FaImage, FaPlus, FaEdit, FaTimes, FaRobot, FaTrash, FaPaperPlane,
     FaBars, FaQuestionCircle, FaPaperclip, FaTimesCircle, FaQuoteLeft, FaComments,
-    FaPlay, FaStop, FaFistRaised, FaBalanceScale, FaCommentDots, FaSave, FaUndo, FaUsers, FaCog, FaChartBar
+    FaPlay, FaStop, FaFistRaised, FaBalanceScale, FaCommentDots, FaSave, FaUndo, FaUsers, FaCog, FaChartBar, FaStore, FaMagic,
+    FaCloudUploadAlt, FaCloudDownloadAlt, FaBrain
 } from 'react-icons/fa';
 import ConfirmationDialog from '../components/ui/ConfirmationDialog'; // Added import
 import GroupChatCreationModal from '../components/GroupChatCreationModal';
 import CharacterSelectionModal from '../components/CharacterSelectionModal';
+import NewCharacterChoiceModal from '../components/NewCharacterChoiceModal';
+import AIEditModal from '../components/AIEditModal';
 import SettingsModal from '../components/SettingsModal';
 import GaugesModal from '../components/GaugesModal';
-import { FORMATTING_INSTRUCTIONS_PROMPT } from '../lib/prompts';
+import QuickCreateCharacterModal, { CreatorPersona } from '../components/QuickCreateCharacterModal';
+import Marketplace from '../components/Marketplace';
+import AuthModal from '../components/AuthModal';
+import UserMenu from '../components/UserMenu';
+import { useAuth } from '@/src/contexts/AuthContext';
+import { FORMATTING_INSTRUCTIONS_PROMPT, CREATOR_PERSONA_PROMPTS } from '../lib/prompts';
 import { Message, Character, Conversation, ChutesApiRequestBody, EmotionGauges } from '../lib/types';
 
 // --- Constants ---
@@ -91,6 +99,7 @@ const cleanAIReply = (reply: string): string => {
 
 
 export default function Home() {
+  const { session } = useAuth();
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [currentConversationId, setCurrentConversationId] = useState<string>('')
   const [input, setInput] = useState('')
@@ -121,6 +130,7 @@ export default function Home() {
   const [chatFontSize, setChatFontSize] = useState('text-sm'); // Added state for chat font size
   const [allowAICustomTextColor, setAllowAICustomTextColor] = useState(true); // Renamed, default true
   const [cheatMode, setCheatMode] = useState(true); // Added for gauge editing
+  const [useMemory, setUseMemory] = useState(false); // For long-term memory feature
 
   const [showCharToCharSelectModal, setShowCharToCharSelectModal] = useState(false);
   const [charToCharCandidates, setCharToCharCandidates] = useState<[string | null, string | null]>([null, null]);
@@ -133,6 +143,9 @@ export default function Home() {
 
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editingMessageText, setEditingMessageText] = useState<string>('');
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [publishingCharacterId, setPublishingCharacterId] = useState<string | null>(null);
+  const [isSavingMemory, setIsSavingMemory] = useState(false);
 
   const [showDeleteConversationDialog, setShowDeleteConversationDialog] = useState(false);
   const [conversationToDeleteId, setConversationToDeleteId] = useState<string | null>(null);
@@ -143,6 +156,11 @@ export default function Home() {
   const [showCharacterSelection, setShowCharacterSelection] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showGaugesModal, setShowGaugesModal] = useState(false);
+  const [showQuickCreateModal, setShowQuickCreateModal] = useState(false);
+  const [viewMode, setViewMode] = useState<'chat' | 'marketplace'>('chat');
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [showNewCharacterChoiceModal, setShowNewCharacterChoiceModal] = useState(false);
+  const [isAIEditModalOpen, setIsAIEditModalOpen] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const chatMessagesContainerRef = useRef<HTMLDivElement>(null)
@@ -192,8 +210,16 @@ export default function Home() {
         setConversations(loadedConversations);
 
         if (data.characters && data.characters.length > 0) {
-          loadedCharacters = (data.characters || []).map((char: Character) => ({
+          loadedCharacters = (data.characters || []).map((char: any): Character => ({
             ...char,
+            description: char.description || '',
+            systemPrompt: char.systemPrompt || '',
+            color: char.color || '#6366f1',
+            icon: char.icon || '👤',
+            activeHours: char.activeHours || { start: 0, end: 23 },
+            useActiveHours: char.useActiveHours === undefined ? false : char.useActiveHours,
+            isPublic: char.isPublic === undefined ? false : char.isPublic,
+            public_id: char.public_id || null,
             gauges: char.gauges || DEFAULT_GAUGES,
             useGauges: char.useGauges === undefined ? true : char.useGauges,
           }));
@@ -210,6 +236,7 @@ export default function Home() {
         setChatFontSize(data.chatFontSize || 'text-sm');
         setAllowAICustomTextColor(data.allowAICustomTextColor === undefined ? true : data.allowAICustomTextColor);
         setCheatMode(data.cheatMode === undefined ? true : data.cheatMode);
+        setUseMemory(data.useMemory === undefined ? false : data.useMemory);
       } else {
         // Set default settings for a fresh start
         setBackgroundColor(Object.keys(LIGHT_MODE_CHAT_BACKGROUNDS)[0]);
@@ -301,11 +328,11 @@ export default function Home() {
            lineThemeActive, displayedQuote, isAutoReplying, // showEmotionIcons removed
           chatFontSize, // Save chat font size
            allowAICustomTextColor, // Save new setting
-           cheatMode,
+           cheatMode, useMemory,
         };
         localStorage.setItem('chatAppData', JSON.stringify(data));
     }
-  }, [conversations, characters, currentConversationId, currentCharacterId, backgroundColor, isDarkMode, useCensorship, lineThemeActive, displayedQuote, isAutoReplying, chatFontSize, allowAICustomTextColor, cheatMode]);
+  }, [conversations, characters, currentConversationId, currentCharacterId, backgroundColor, isDarkMode, useCensorship, lineThemeActive, displayedQuote, isAutoReplying, chatFontSize, allowAICustomTextColor, cheatMode, useMemory]);
 
   useEffect(() => {
     const sidebarElement = sidebarRef.current;
@@ -480,8 +507,8 @@ export default function Home() {
     setEditingConversationTitle('');
   }, []);
 
-  const addCharacter = useCallback(() => {
-    if (!newCharacter.name?.trim()) return
+  const addCharacter = useCallback(async () => {
+    if (!newCharacter.name?.trim()) return;
     const charDescription = newCharacter.description || 'フレンドリーなAI';
     const charSystemPrompt = newCharacter.systemPrompt || generateSystemPrompt(newCharacter.name, charDescription);
     const character: Character = {
@@ -496,21 +523,101 @@ export default function Home() {
       isPublic: newCharacter.isPublic || false,
       gauges: newCharacter.gauges || DEFAULT_GAUGES,
       useGauges: newCharacter.useGauges === undefined ? true : newCharacter.useGauges,
+    };
+
+    if (character.isPublic) {
+      if (!session) {
+        alert('キャラクターを公開するにはログインが必要です。');
+        // We'll still add the character locally, but not publish.
+      } else {
+        try {
+            const publicCharacterPayload = { ...character, id: character.public_id };
+
+            const response = await fetch('/api/public-characters', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${session.access_token}`,
+                },
+                body: JSON.stringify(publicCharacterPayload),
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Failed to publish character');
+            }
+
+            const publishedCharacter = await response.json();
+            // Update the local character with the public_id from the database
+            character.public_id = publishedCharacter.id;
+
+            console.log('Character published successfully!', publishedCharacter);
+
+        } catch (error) {
+            console.error(error);
+            alert(`キャラクターの公開に失敗しました: ${(error as Error).message}`);
+            // Don't add the character locally if publishing fails, to avoid inconsistency.
+            return;
+        }
+      }
     }
+
     setCharacters(prev => [character, ...prev]);
-    setNewCharacter({ name: '', description: '', systemPrompt: '', color: '#6366f1', activeHours: { start: 0, end: 23 }, useActiveHours: false, icon: '👤', isPublic: false, gauges: DEFAULT_GAUGES, useGauges: true })
+    setNewCharacter({ name: '', description: '', systemPrompt: '', color: '#6366f1', activeHours: { start: 0, end: 23 }, useActiveHours: false, icon: '👤', isPublic: false, gauges: DEFAULT_GAUGES, useGauges: true });
     setShowCharacterDialog(false); if (window.innerWidth < 1024) setSidebarOpen(false);
   }, [newCharacter, generateSystemPrompt]);
 
-  const saveCharacterEdit = useCallback(() => {
-    if (!editingCharacter || !editingCharacter.name?.trim()) return
+  const saveCharacterEdit = useCallback(async () => {
+    if (!editingCharacter || !editingCharacter.name?.trim()) return;
     const charDescription = editingCharacter.description || 'フレンドリーなAI';
-    const updatedCharacterData = { ...editingCharacter,
+    const updatedCharacterData: Character = { ...editingCharacter,
       description: charDescription,
       systemPrompt: editingCharacter.systemPrompt || generateSystemPrompt(editingCharacter.name, charDescription),
     };
-    setCharacters(prev => prev.map(char => char.id === updatedCharacterData.id ? updatedCharacterData as Character : char))
-    setEditingCharacter(null); setShowCharacterDialog(false)
+
+    // This variable will hold the final character data to be set in the state
+    let finalCharacterData = { ...updatedCharacterData };
+
+    if (finalCharacterData.isPublic) {
+      if (!session) {
+        alert('キャラクターを公開するにはログインが必要です。公開設定はオフのまま保存されます。');
+        finalCharacterData.isPublic = false; // Uncheck isPublic if not logged in
+      } else {
+        try {
+            // Use public_id for the 'id' field in the payload
+            const publicCharacterPayload = { ...finalCharacterData, id: finalCharacterData.public_id };
+
+            const response = await fetch('/api/public-characters', {
+                method: 'POST', // The API route handles this via upsert
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${session.access_token}`,
+                },
+                body: JSON.stringify(publicCharacterPayload),
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Failed to publish character');
+            }
+
+            const publishedCharacter = await response.json();
+            // Update the character data with the returned public_id
+            finalCharacterData.public_id = publishedCharacter.id;
+
+            console.log('Character updated and published successfully!', publishedCharacter);
+
+        } catch (error) {
+            console.error(error);
+            alert(`キャラクターの公開/更新に失敗しました: ${(error as Error).message}`);
+            // If publishing fails, we can decide to either save locally without the public flag
+            // or block the save entirely. For now, we'll just alert.
+        }
+      }
+    }
+
+    setCharacters(prev => prev.map(char => char.id === finalCharacterData.id ? finalCharacterData : char));
+    setEditingCharacter(null); setShowCharacterDialog(false);
   }, [editingCharacter, generateSystemPrompt]);
 
   const switchToCharacter = useCallback((characterId: string) => {
@@ -535,6 +642,181 @@ export default function Home() {
     if (editingCharacter) setEditingCharacter(prev => ({ ...(prev as Character), ...randomValues }));
     else setNewCharacter(prev => ({...prev, ...randomValues}));
   }, [editingCharacter, generateRandomCharacterValues]);
+
+  const handleTogglePublish = useCallback(async (characterId: string) => {
+    if (!session) {
+      alert('キャラクターを公開/非公開にするにはログインが必要です。');
+      return;
+    }
+
+    const character = characters.find(c => c.id === characterId);
+    if (!character) return;
+
+    setPublishingCharacterId(character.id);
+
+    try {
+      if (character.isPublic && character.public_id) {
+        // --- Unpublish ---
+        const response = await fetch('/api/public-characters/publish', {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({ public_id: character.public_id }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to unpublish character');
+        }
+
+        setCharacters(prev => prev.map(c =>
+          c.id === characterId ? { ...c, isPublic: false, public_id: null } : c
+        ));
+
+      } else {
+        // --- Publish ---
+        const response = await fetch('/api/public-characters/publish', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify(character),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to publish character');
+        }
+
+        const publishedCharacter = await response.json();
+        setCharacters(prev => prev.map(c =>
+          c.id === characterId ? { ...c, isPublic: true, public_id: publishedCharacter.id } : c
+        ));
+      }
+    } catch (error) {
+      console.error('Failed to toggle publish state', error);
+      alert(`エラー: ${(error as Error).message}`);
+    } finally {
+      setPublishingCharacterId(null);
+    }
+  }, [characters, session]);
+
+  const handleSaveMemory = useCallback(async () => {
+    if (!currentConversation || !currentCharacterForNormalChat || !session) {
+      alert('記憶を保存するには、キャラクターとの会話を選択し、ログインしている必要があります。');
+      return;
+    }
+    if (currentConversation.messages.length < 4) { // Need at least a few turns
+      alert('記憶を生成するには、もう少し会話を続けてください。');
+      return;
+    }
+
+    setIsSavingMemory(true);
+    try {
+      const response = await fetch('/api/summarize-conversation', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          messages: currentConversation.messages,
+          model: model,
+          character_id: currentCharacterForNormalChat.id,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to save memory.');
+      }
+
+      const data = await response.json();
+      alert(`記憶を保存しました！\n\n要約:\n${data.summary}`);
+
+    } catch (error) {
+      console.error('Failed to save memory', error);
+      alert(`エラー: ${(error as Error).message}`);
+    } finally {
+      setIsSavingMemory(false);
+    }
+  }, [currentConversation, currentCharacterForNormalChat, session, model]);
+
+  const handleImportCharacter = useCallback(async (characterId: string) => {
+    if (characters.some(c => c.id === characterId)) {
+        alert('このキャラクターは既にインポート済みです。');
+        return;
+    }
+    try {
+        const response = await fetch(`/api/public-characters/${characterId}`);
+        if (!response.ok) {
+            throw new Error('キャラクターのインポートに失敗しました。');
+        }
+        const characterToImport = await response.json();
+
+        // Remove server-only fields before adding to local state
+        const { created_at, author_id, likes_count, ...localCharacter } = characterToImport;
+
+        setCharacters(prev => [localCharacter as Character, ...prev]);
+        alert(`キャラクター「${localCharacter.name}」をインポートしました！`);
+        setViewMode('chat');
+        setCurrentCharacterId(localCharacter.id);
+
+    } catch (error) {
+        console.error(error);
+        alert((error as Error).message);
+    }
+  }, [characters]);
+
+  const handleGeneratePrompt = useCallback(async (persona: CreatorPersona, userPrompt: string) => {
+    setIsGenerating(true);
+    try {
+        const creatorSystemPrompt = CREATOR_PERSONA_PROMPTS[persona];
+        const messagesPayload = [
+            { role: 'system', content: creatorSystemPrompt },
+            { role: 'user', content: userPrompt }
+        ];
+        const apiRequestBody: ChutesApiRequestBody = {
+            model,
+            messages: messagesPayload,
+            temperature: 0.8, // Use a slightly higher temperature for creativity
+            useCensorship: false, // Allow more creative freedom
+        };
+
+        const response = await fetch('/api/chutes', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(apiRequestBody)
+        });
+
+        if (!response.ok) {
+            const errorData = await response.text();
+            throw new Error(`HTTP error! status: ${response.status}, message: ${errorData}`);
+        }
+
+        const data = await response.json();
+        const generatedPrompt = data.reply || '';
+
+        // Pre-fill the new character form with the generated prompt
+        setNewCharacter(prev => ({
+            ...prev,
+            systemPrompt: generatedPrompt,
+            name: '',
+            description: userPrompt.substring(0, 50), // Use user prompt as description basis
+        }));
+        setShowQuickCreateModal(false);
+        setShowCharacterDialog(true);
+
+    } catch (error) {
+        console.error("Error generating character prompt:", error);
+        alert("プロンプトの生成中にエラーが発生しました。");
+    } finally {
+        setIsGenerating(false);
+    }
+  }, [model, temperature]);
 
   const extractAndApplyGaugeChanges = useCallback((reply: string, characterId: string): string => {
     const gaugeMatch = reply.match(/<gauges>([\s\S]*?)<\/gauges>/);
@@ -756,11 +1038,31 @@ export default function Home() {
                 };
             });
 
+            let systemPrompt = currentCharacterForNormalChat.systemPrompt;
+
+            // Memory Injection Logic
+            if (useMemory && session && activeConversation.messages.length === 1) {
+              try {
+                const memoryResponse = await fetch(`/api/get-memory?character_id=${currentCharacterForNormalChat.id}`, {
+                  headers: { 'Authorization': `Bearer ${session.access_token}` },
+                });
+                if (memoryResponse.ok) {
+                  const memoryData = await memoryResponse.json();
+                  if (memoryData.memory_summary) {
+                    const memoryPrefix = `あなたはユーザーとの間に以下の記憶を持っています。これを会話に活かしてください。\n--- 記憶 ---\n${memoryData.memory_summary}\n--- 記憶ここまで ---\n\n`;
+                    systemPrompt = memoryPrefix + systemPrompt;
+                  }
+                }
+              } catch (e) {
+                console.error("Failed to fetch memory, proceeding without it.", e);
+              }
+            }
+
             const messagesPayload = [];
             if (currentCharacterForNormalChat.useGauges) {
                 messagesPayload.push({ role: 'system', content: FORMATTING_INSTRUCTIONS_PROMPT });
             }
-            messagesPayload.push({ role: 'system', content: currentCharacterForNormalChat.systemPrompt });
+            messagesPayload.push({ role: 'system', content: systemPrompt });
             messagesPayload.push(...historyForApi);
             const apiRequestBody: ChutesApiRequestBody = { model, messages: messagesPayload, temperature, useCensorship };
             if (isImageMessage && localImageDataUrl && currentModelSupportsImage && !editedMessageId) {
@@ -1675,6 +1977,29 @@ export default function Home() {
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet" />
       </Head>
 
+      <AuthModal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} />
+
+      {isAIEditModalOpen && <AIEditModal
+        isOpen={isAIEditModalOpen}
+        onClose={() => setIsAIEditModalOpen(false)}
+        character={editingCharacter}
+        onApplyProposal={(proposal) => setEditingCharacter(proposal)}
+        isDarkMode={isDarkMode}
+        model={model}
+      />}
+
+      <NewCharacterChoiceModal
+        isOpen={showNewCharacterChoiceModal}
+        onClose={() => setShowNewCharacterChoiceModal(false)}
+        onManualCreate={() => {
+          setEditingCharacter(null);
+          setNewCharacter({ name: '', description: '', systemPrompt: '', color: '#6366f1', activeHours: { start: 0, end: 23 }, useActiveHours: false, icon: '👤', isPublic: false, gauges: DEFAULT_GAUGES, useGauges: true });
+          setShowCharacterDialog(true);
+        }}
+        onQuickCreate={() => setShowQuickCreateModal(true)}
+        isDarkMode={isDarkMode}
+      />
+
       {showCharacterSelection && (
         <CharacterSelectionModal
           isOpen={showCharacterSelection}
@@ -1688,6 +2013,10 @@ export default function Home() {
           onCreateNew={() => {
             setShowCharacterSelection(false);
             setShowCharacterDialog(true);
+          }}
+          onQuickCreate={() => {
+            setShowCharacterSelection(false);
+            setShowQuickCreateModal(true);
           }}
           isDarkMode={isDarkMode}
         />
@@ -1734,6 +2063,14 @@ export default function Home() {
         }}
       />
 
+      <QuickCreateCharacterModal
+        isOpen={showQuickCreateModal}
+        onClose={() => setShowQuickCreateModal(false)}
+        isDarkMode={isDarkMode}
+        isGenerating={isGenerating}
+        onGenerate={handleGeneratePrompt}
+      />
+
       <div className="flex flex-1 overflow-hidden">
         <div ref={sidebarRef} className={`
             ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0
@@ -1761,6 +2098,19 @@ export default function Home() {
                 <button onClick={() => setIsDarkMode(!isDarkMode)} className={`p-2 rounded-full text-xl ${isDarkMode ? 'bg-yellow-400 text-slate-900 hover:bg-yellow-300' : 'bg-slate-700 text-yellow-300 hover:bg-slate-600'} shadow-md transition-all duration-200`} title={isDarkMode ? "ライトモード" : "ダークモード"}> {isDarkMode ? '☀️' : '🌙'} </button>
               </div>
             </div>
+             <div className="p-2">
+                <button
+                    onClick={() => setViewMode(viewMode === 'chat' ? 'marketplace' : 'chat')}
+                    className={`w-full flex items-center justify-center px-4 py-2.5 rounded-lg transition-colors duration-150 text-sm font-semibold shadow-sm ${viewMode === 'marketplace' ? 'bg-white/30 text-white' : 'bg-white/10 text-white/80 hover:bg-white/20'}`}
+                >
+                    <FaStore className="mr-2" />
+                    {viewMode === 'chat' ? '公開キャラを探す' : 'チャットに戻る'}
+                </button>
+            </div>
+          </div>
+
+          <div className={`p-2 border-b ${sidebarActualBorderColor}`}>
+            {!isAuthModalOpen && <UserMenu onLoginClick={() => setIsAuthModalOpen(true)} />}
           </div>
 
           <div className={`p-4 border-b ${sidebarActualBorderColor}`}>
@@ -1819,7 +2169,7 @@ export default function Home() {
           <div className={`p-4 border-b ${sidebarActualBorderColor}`}>
             <div className="flex justify-between items-center mb-3.5">
               <h3 className={`font-semibold text-lg ${sidebarActualTextColor}`}>キャラクター</h3>
-              <button onClick={() => { setEditingCharacter(null); setNewCharacter({ name: '', description: '', systemPrompt: '', color: '#6366f1', activeHours: { start: 0, end: 23 }, useActiveHours: false, icon: '👤', isPublic: false }); setShowCharacterDialog(true); }} className={`p-2 text-white rounded-full transition-all duration-150 bg-green-500 hover:bg-green-600 active:bg-green-700 shadow-md`} title="新しいキャラクター"> <FaPlus size={14} /> </button>
+              <button onClick={() => setShowNewCharacterChoiceModal(true)} className={`p-2 text-white rounded-full transition-all duration-150 bg-green-500 hover:bg-green-600 active:bg-green-700 shadow-md`} title="新しいキャラクター"> <FaPlus size={14} /> </button>
             </div>
             <div className="space-y-1.5 max-h-40 md:max-h-52 lg:max-h-40 overflow-y-auto pr-1 custom-scrollbar">
               {characters.map(char => (
@@ -1839,6 +2189,17 @@ export default function Home() {
                         title={`${char.name}と新しい会話`}
                     >
                         <FaCommentDots size={13} />
+                    </button>
+                    <button
+                        onClick={(e) => { e.stopPropagation(); handleTogglePublish(char.id); }}
+                        disabled={publishingCharacterId === char.id}
+                        className={`p-1.5 rounded-full opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity ${isDarkMode ? 'text-purple-400 hover:text-purple-300 hover:bg-slate-600/50' : 'text-purple-500 hover:text-purple-700 hover:bg-purple-100/70'} disabled:cursor-not-allowed`}
+                        title={char.isPublic ? "非公開にする" : "公開する"}
+                    >
+                        {publishingCharacterId === char.id
+                          ? <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
+                          : (char.isPublic ? <FaCloudDownloadAlt size={13} /> : <FaCloudUploadAlt size={13} />)
+                        }
                     </button>
                     <button onClick={(e) => { e.stopPropagation(); setEditingCharacter(JSON.parse(JSON.stringify(char))); setShowCharacterDialog(true); }} className={`p-1.5 rounded-full opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity ${isDarkMode ? 'text-slate-400 hover:text-slate-200 hover:bg-slate-600/50' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/70'}`} title="キャラクター編集"> <FaEdit size={13} /> </button>
                     <button onClick={(e) => deleteCharacterCallback(e, char.id)} className={`p-1.5 rounded-full opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity ${isDarkMode ? 'text-red-400 hover:text-red-300 hover:bg-slate-600/50' : 'text-red-500 hover:text-red-600 hover:bg-red-100/70'}`} title="キャラクター削除"> <FaTrash size={13} /> </button>
@@ -1863,96 +2224,120 @@ export default function Home() {
         </div>
 
         <div className="flex-1 flex flex-col overflow-hidden">
-          <div className={`p-4 border-b flex items-center justify-between shadow-sm ${chatHeaderActualBgClass} ${lineThemeActive ? (isLineDark ? 'border-slate-700' : 'border-transparent') : generalBorderColor }`} style={chatHeaderActualBgStyle} >
-            <div className="flex items-center min-w-0">
-                <button onClick={() => setSidebarOpen(!sidebarOpen)} className={`lg:hidden mr-3 p-2.5 rounded-md hover:${isDarkMode || (lineThemeActive && isLineDark)?'bg-slate-700/70':'bg-slate-200/70'} ${chatHeaderActualTextColor} transition-colors`} title="メニューを開閉"> <FaBars size={18} /> </button>
+            {/* --- Main Header --- */}
+            <div className={`p-4 border-b flex items-center justify-between shadow-sm ${chatHeaderActualBgClass} ${lineThemeActive ? (isLineDark ? 'border-slate-700' : 'border-transparent') : generalBorderColor }`} style={chatHeaderActualBgStyle} >
+                <div className="flex items-center min-w-0">
+                    <button onClick={() => setSidebarOpen(!sidebarOpen)} className={`lg:hidden mr-3 p-2.5 rounded-md hover:${isDarkMode || (lineThemeActive && isLineDark)?'bg-slate-700/70':'bg-slate-200/70'} ${chatHeaderActualTextColor} transition-colors`} title="メニューを開閉"> <FaBars size={18} /> </button>
 
-                {currentConversation && currentConversation.isGroupChat && currentConversation.groupParticipantIds ? (
-                    <>
-                        <div className="flex -space-x-3 mr-3">
-                            {currentConversation.groupParticipantIds.slice(0, 5).map(id => {
-                                const char = characters.find(c => c.id === id);
-                                if (!char) return null;
-                                return (
-                                    <div key={id} className="text-2xl w-9 h-9 flex items-center justify-center rounded-full shadow-sm border-2 border-white dark:border-slate-800" style={{backgroundColor: char.color || '#A0AEC0'}} title={char.name}>
-                                        {char.icon}
+                    {viewMode === 'marketplace' ? (
+                        <h2 className={`text-lg font-semibold truncate ${chatHeaderActualTextColor}`}>キャラクター広場</h2>
+                    ) : currentConversation && currentConversation.isGroupChat && currentConversation.groupParticipantIds ? (
+                        <>
+                            <div className="flex -space-x-3 mr-3">
+                                {currentConversation.groupParticipantIds.slice(0, 5).map(id => {
+                                            const char = characters.find(c => c.id === id);
+                                            if (!char) return null;
+                                            return (
+                                                <div key={id} className="text-2xl w-9 h-9 flex items-center justify-center rounded-full shadow-sm border-2 border-white dark:border-slate-800" style={{backgroundColor: char.color || '#A0AEC0'}} title={char.name}>
+                                                    {char.icon}
+                                                </div>
+                                            );
+                                        })}
                                     </div>
-                                );
-                            })}
+                                    <h2 className={`text-lg font-semibold truncate ${chatHeaderActualTextColor}`}>
+                                        {currentConversation.title || "Group Chat"}
+                                    </h2>
+                                </>
+                            ) : currentConversation?.isCharToCharConversation && currentConversation.participantCharacterIds ? (
+                                <>
+                                    <div className="flex -space-x-3 mr-3">
+                                        {characters.find(c=>c.id === currentConversation.participantCharacterIds![0]) && <div className="text-2xl w-9 h-9 flex items-center justify-center rounded-full shadow-sm border-2 border-white dark:border-slate-800" style={{backgroundColor: characters.find(c=>c.id === currentConversation.participantCharacterIds![0])?.color || '#A0AEC0'}}>{characters.find(c=>c.id === currentConversation.participantCharacterIds![0])?.icon}</div>}
+                                        {characters.find(c=>c.id === currentConversation.participantCharacterIds![1]) && <div className="text-2xl w-9 h-9 flex items-center justify-center rounded-full shadow-sm border-2 border-white dark:border-slate-800" style={{backgroundColor: characters.find(c=>c.id === currentConversation.participantCharacterIds![1])?.color || '#A0AEC0'}}>{characters.find(c=>c.id === currentConversation.participantCharacterIds![1])?.icon}</div>}
+                                    </div>
+                                    <h2 className={`text-lg font-semibold truncate ${chatHeaderActualTextColor}`}>{currentConversation.title || "キャラクター同士の会話"}</h2>
+                                </>
+                            ) : currentCharacterForNormalChat ? (
+                                <>
+                                    <div className="text-2xl mr-3 w-9 h-9 flex items-center justify-center rounded-full shadow-sm flex-shrink-0" style={{backgroundColor: currentCharacterForNormalChat.color || '#A0AEC0'}}>{currentCharacterForNormalChat.icon}</div>
+                                    <div className="min-w-0">
+                                        <h2 className={`text-lg font-semibold truncate ${chatHeaderActualTextColor}`}>{currentCharacterForNormalChat.name}</h2>
+                                        {currentCharacterForNormalChat.useActiveHours && ( <span className={`text-xs font-medium px-1.5 py-0.5 rounded-full ${isCharacterActive(currentCharacterForNormalChat) ? (lineThemeActive && !isLineDark ? 'bg-lime-200 text-lime-700':'bg-green-500/20 text-green-400') : (lineThemeActive && !isLineDark ? 'bg-red-200 text-red-700':'bg-red-500/20 text-red-400')}`}> {isCharacterActive(currentCharacterForNormalChat) ? '● オンライン' : `○ オフライン (${currentCharacterForNormalChat.activeHours.start}:00-${currentCharacterForNormalChat.activeHours.end}:00)`} </span> )}
+                                    </div>
+                                </>
+                            ) : (<h2 className={`text-lg font-semibold ${chatHeaderActualTextColor}`}>キャラクターを選択してください</h2>)}
                         </div>
-                        <h2 className={`text-lg font-semibold truncate ${chatHeaderActualTextColor}`}>
-                            {currentConversation.title || "Group Chat"}
-                        </h2>
-                    </>
-                ) : currentConversation?.isCharToCharConversation && currentConversation.participantCharacterIds ? (
-                    <>
-                        <div className="flex -space-x-3 mr-3">
-                            {characters.find(c=>c.id === currentConversation.participantCharacterIds![0]) && <div className="text-2xl w-9 h-9 flex items-center justify-center rounded-full shadow-sm border-2 border-white dark:border-slate-800" style={{backgroundColor: characters.find(c=>c.id === currentConversation.participantCharacterIds![0])?.color || '#A0AEC0'}}>{characters.find(c=>c.id === currentConversation.participantCharacterIds![0])?.icon}</div>}
-                            {characters.find(c=>c.id === currentConversation.participantCharacterIds![1]) && <div className="text-2xl w-9 h-9 flex items-center justify-center rounded-full shadow-sm border-2 border-white dark:border-slate-800" style={{backgroundColor: characters.find(c=>c.id === currentConversation.participantCharacterIds![1])?.color || '#A0AEC0'}}>{characters.find(c=>c.id === currentConversation.participantCharacterIds![1])?.icon}</div>}
+                        <div className="flex items-center space-x-2">
+                          {viewMode === 'chat' && currentCharacterForNormalChat && (
+                            <button
+                              onClick={handleSaveMemory}
+                              disabled={isSavingMemory}
+                              className={`p-2.5 rounded-md hover:${isDarkMode || (lineThemeActive && isLineDark)?'bg-slate-700/70':'bg-slate-200/70'} ${chatHeaderActualTextColor} transition-colors disabled:opacity-50 disabled:cursor-not-allowed`}
+                              title="会話の記憶を保存"
+                            >
+                              {isSavingMemory ? <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></div> : <FaBrain size={18} />}
+                            </button>
+                          )}
+                          {viewMode === 'chat' && currentCharacterForNormalChat && currentCharacterForNormalChat.useGauges && (
+                            <button onClick={() => setShowGaugesModal(true)} className={`p-2.5 rounded-md hover:${isDarkMode || (lineThemeActive && isLineDark)?'bg-slate-700/70':'bg-slate-200/70'} ${chatHeaderActualTextColor} transition-colors`} title="感情ゲージ">
+                              <FaChartBar size={18} />
+                            </button>
+                          )}
+                          {viewMode === 'chat' && currentConversation?.isCharToCharConversation && (
+                              <button onClick={toggleAutoReply} className={`p-2.5 rounded-md ${isAutoReplying ? (lineThemeActive && !isLineDark ? 'bg-red-200 text-red-700 hover:bg-red-300' : 'bg-red-500/20 text-red-400 hover:bg-red-500/30') : (lineThemeActive && !isLineDark ? 'bg-green-200 text-green-700 hover:bg-green-300' : 'bg-green-500/20 text-green-400 hover:bg-green-500/30')} transition-colors`} title={isAutoReplying ? "自動会話を停止" : "自動会話を開始/再開"}>
+                                  {isAutoReplying ? <FaStop size={18} /> : <FaPlay size={18} />}
+                              </button>
+                          )}
                         </div>
-                        <h2 className={`text-lg font-semibold truncate ${chatHeaderActualTextColor}`}>{currentConversation.title || "キャラクター同士の会話"}</h2>
-                    </>
-                ) : currentCharacterForNormalChat ? (
-                    <>
-                        <div className="text-2xl mr-3 w-9 h-9 flex items-center justify-center rounded-full shadow-sm flex-shrink-0" style={{backgroundColor: currentCharacterForNormalChat.color || '#A0AEC0'}}>{currentCharacterForNormalChat.icon}</div>
-                        <div className="min-w-0">
-                            <h2 className={`text-lg font-semibold truncate ${chatHeaderActualTextColor}`}>{currentCharacterForNormalChat.name}</h2>
-                            {currentCharacterForNormalChat.useActiveHours && ( <span className={`text-xs font-medium px-1.5 py-0.5 rounded-full ${isCharacterActive(currentCharacterForNormalChat) ? (lineThemeActive && !isLineDark ? 'bg-lime-200 text-lime-700':'bg-green-500/20 text-green-400') : (lineThemeActive && !isLineDark ? 'bg-red-200 text-red-700':'bg-red-500/20 text-red-400')}`}> {isCharacterActive(currentCharacterForNormalChat) ? '● オンライン' : `○ オフライン (${currentCharacterForNormalChat.activeHours.start}:00-${currentCharacterForNormalChat.activeHours.end}:00)`} </span> )}
+                    </div>
+
+            {/* --- Main Content Area --- */}
+            {viewMode === 'marketplace' ? (
+                <Marketplace
+                    isDarkMode={isDarkMode}
+                    onImport={handleImportCharacter}
+                />
+            ) : (
+                <>
+                    <div ref={chatMessagesContainerRef} className={`flex-1 overflow-y-auto space-y-1 scroll-smooth custom-scrollbar ${lineThemeActive ? 'p-4' : 'p-2 sm:p-4'}`} style={{ backgroundColor: chatMessagesListActualBg }}>
+                        {currentConversation && currentConversation.messages.map((msg) => ( <MessageItem key={msg.id} msg={msg} currentChatFontSize={chatFontSize} /> ))}
+                        <div ref={messagesEndRef} />
+                        {!currentConversation && (
+                          <div className="flex flex-col items-center justify-center h-full text-center">
+                            <h2 className={`text-2xl font-bold mb-4 ${generalTextColor}`}>Kintへようこそ</h2>
+                            <p className={`mb-8 ${generalTextColor}`}>始めるには、下のボタンを押してください。</p>
+                            <button
+                              onClick={() => setShowCharacterSelection(true)}
+                              className="px-8 py-4 bg-pink-500 text-white font-bold rounded-lg shadow-lg hover:bg-pink-600 transition-colors"
+                            >
+                              始める
+                            </button>
+                          </div>
+                        )}
+                    </div>
+                    {currentConversation && !currentConversation.isCharToCharConversation && QUICK_MESSAGES.length > 0 && (
+                    <div className={`px-4 pt-2.5 pb-2 border-t ${lineThemeActive ? (isLineDark ? 'border-slate-700' : 'border-transparent') : generalBorderColor} ${isDarkMode || (lineThemeActive && isLineDark)? 'bg-slate-700/80' : (lineThemeActive ? 'bg-sky-100/80' : 'bg-slate-100/80')} backdrop-blur-sm`}>
+                        <div className="flex flex-wrap gap-2"> {QUICK_MESSAGES.slice(0,6).map(qm => ( <button key={qm.id} onClick={() => sendQuickMessage(qm.text)} className={`px-3.5 py-1.5 text-xs rounded-full shadow-sm ${ isDarkMode || (lineThemeActive && isLineDark) ? 'bg-slate-600 hover:bg-slate-500 active:bg-slate-400 text-slate-100' : (lineThemeActive ? 'bg-white hover:bg-slate-50 active:bg-slate-100 text-sky-700 border border-sky-300' : 'bg-white hover:bg-slate-200 active:bg-slate-300 text-slate-700 border border-slate-200') } transition-all duration-150 ease-in-out`}> {qm.text} </button> ))} </div>
+                    </div>
+                    )}
+                    {((currentConversation && !currentConversation.isCharToCharConversation && !currentConversation.isGroupChat && currentCharacterForNormalChat) || (currentConversation && currentConversation.isGroupChat)) && (
+                    <div className={`p-3 border-t ${lineThemeActive ? (isLineDark ? 'border-slate-700' : 'border-sky-200') : generalBorderColor} ${inputBarContainerActualBg} shadow-top-sm`}>
+                      {imageToSend && (
+                        <div className={`mb-2 p-2.5 rounded-lg flex items-center justify-between ${isDarkMode ? 'bg-slate-700' : 'bg-slate-200'}`}>
+                          <div className="flex items-center min-w-0"> <img src={imageToSend.url} alt="Preview" className="w-11 h-11 object-cover rounded-md mr-2.5 shadow-sm flex-shrink-0"/> <span className={`text-sm ${effectiveTextColor} truncate`}>{imageToSend.file.name}</span> </div>
+                          <button onClick={() => setImageToSend(null)} className={`p-1.5 rounded-full hover:${isDarkMode ? 'bg-slate-600' : 'bg-slate-300'} ${effectiveTextColor} transition-colors flex-shrink-0 ml-2`}> <FaTimesCircle size={20}/> </button>
                         </div>
-                    </>
-                ) : (<h2 className={`text-lg font-semibold ${chatHeaderActualTextColor}`}>キャラクターを選択してください</h2>)}
-            </div>
-            <div className="flex items-center space-x-2">
-              {currentCharacterForNormalChat && currentCharacterForNormalChat.useGauges && (
-                <button onClick={() => setShowGaugesModal(true)} className={`p-2.5 rounded-md hover:${isDarkMode || (lineThemeActive && isLineDark)?'bg-slate-700/70':'bg-slate-200/70'} ${chatHeaderActualTextColor} transition-colors`} title="感情ゲージ">
-                  <FaChartBar size={18} />
-                </button>
-              )}
-              {currentConversation?.isCharToCharConversation && (
-                  <button onClick={toggleAutoReply} className={`p-2.5 rounded-md ${isAutoReplying ? (lineThemeActive && !isLineDark ? 'bg-red-200 text-red-700 hover:bg-red-300' : 'bg-red-500/20 text-red-400 hover:bg-red-500/30') : (lineThemeActive && !isLineDark ? 'bg-green-200 text-green-700 hover:bg-green-300' : 'bg-green-500/20 text-green-400 hover:bg-green-500/30')} transition-colors`} title={isAutoReplying ? "自動会話を停止" : "自動会話を開始/再開"}>
-                      {isAutoReplying ? <FaStop size={18} /> : <FaPlay size={18} />}
-                  </button>
-              )}
-            </div>
-          </div>
-           <div ref={chatMessagesContainerRef} className={`flex-1 overflow-y-auto space-y-1 scroll-smooth custom-scrollbar ${lineThemeActive ? 'p-4' : 'p-2 sm:p-4'}`} style={{ backgroundColor: chatMessagesListActualBg }}>
-            {currentConversation && currentConversation.messages.map((msg) => ( <MessageItem key={msg.id} msg={msg} currentChatFontSize={chatFontSize} /> ))}
-            <div ref={messagesEndRef} />
-            {!currentConversation && (
-              <div className="flex flex-col items-center justify-center h-full text-center">
-                <h2 className={`text-2xl font-bold mb-4 ${generalTextColor}`}>Kintへようこそ</h2>
-                <p className={`mb-8 ${generalTextColor}`}>始めるには、下のボタンを押してください。</p>
-                <button
-                  onClick={() => setShowCharacterSelection(true)}
-                  className="px-8 py-4 bg-pink-500 text-white font-bold rounded-lg shadow-lg hover:bg-pink-600 transition-colors"
-                >
-                  始める
-                </button>
-              </div>
+                      )}
+                      <div className={`flex items-center space-x-2 p-1.5 rounded-xl shadow-sm ${inputFieldActualBgColor} border ${inputFieldActualBorderColor}`}>
+                        <button onClick={() => fileInputRef.current?.click()} className={`p-2.5 rounded-lg ${currentModelSupportsImage ? `hover:${isDarkMode ?'bg-slate-600/70':'bg-slate-200/70'} cursor-pointer` : 'opacity-50 cursor-not-allowed'} ${inputFieldActualTextColor} transition-colors`} title={currentModelSupportsImage ? "画像添付" : "現在のモデルは画像に非対応です"} disabled={!currentModelSupportsImage}> <FaPaperclip size={18}/> </button>
+                        <input ref={fileInputRef} id="image-upload-hidden" type="file" accept="image/*" className="hidden" onChange={handleImageFileSelect} disabled={!currentModelSupportsImage}/>
+                        <input type="text" value={input} onChange={(e) => setInput(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && !isSending && sendMessage()} placeholder={currentConversation?.isGroupChat ? 'グループメッセージを送信...' : `${currentCharacterForNormalChat?.name || ''}にメッセージを送信...`} className={`flex-1 px-3 py-2.5 rounded-lg bg-transparent focus:outline-none text-sm sm:text-base ${inputFieldActualTextColor} placeholder-${isDarkMode || (lineThemeActive && isLineDark)?'text-slate-500':'text-slate-400'}`} disabled={isSending} />
+                        {/* Continue conversation button removed from here */}
+                        <button onClick={() => sendMessage()} disabled={isSending || (!input.trim() && !imageToSend) || (imageToSend && !currentModelSupportsImage) } className={`p-3 rounded-lg text-white transition-all duration-150 ease-in-out ${isSending || (!input.trim() && !imageToSend) || (imageToSend && !currentModelSupportsImage) ? (isDarkMode || (lineThemeActive && isLineDark)?'bg-slate-500 cursor-not-allowed':'bg-slate-400 cursor-not-allowed') : (lineThemeActive && !isLineDark ? 'bg-green-500 hover:bg-green-600 active:bg-green-700' : 'bg-indigo-500 hover:bg-indigo-600 active:bg-indigo-700')} shadow-sm`} title="送信"> {isSending ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : <FaPaperPlane size={18}/>} </button>
+                      </div>
+                    </div>
+                    )}
+                </>
             )}
-          </div>
-            {currentConversation && !currentConversation.isCharToCharConversation && QUICK_MESSAGES.length > 0 && (
-            <div className={`px-4 pt-2.5 pb-2 border-t ${lineThemeActive ? (isLineDark ? 'border-slate-700' : 'border-transparent') : generalBorderColor} ${isDarkMode || (lineThemeActive && isLineDark)? 'bg-slate-700/80' : (lineThemeActive ? 'bg-sky-100/80' : 'bg-slate-100/80')} backdrop-blur-sm`}>
-                <div className="flex flex-wrap gap-2"> {QUICK_MESSAGES.slice(0,6).map(qm => ( <button key={qm.id} onClick={() => sendQuickMessage(qm.text)} className={`px-3.5 py-1.5 text-xs rounded-full shadow-sm ${ isDarkMode || (lineThemeActive && isLineDark) ? 'bg-slate-600 hover:bg-slate-500 active:bg-slate-400 text-slate-100' : (lineThemeActive ? 'bg-white hover:bg-slate-50 active:bg-slate-100 text-sky-700 border border-sky-300' : 'bg-white hover:bg-slate-200 active:bg-slate-300 text-slate-700 border border-slate-200') } transition-all duration-150 ease-in-out`}> {qm.text} </button> ))} </div>
-            </div>
-            )}
-          {((currentConversation && !currentConversation.isCharToCharConversation && !currentConversation.isGroupChat && currentCharacterForNormalChat) || (currentConversation && currentConversation.isGroupChat)) && (
-            <div className={`p-3 border-t ${lineThemeActive ? (isLineDark ? 'border-slate-700' : 'border-sky-200') : generalBorderColor} ${inputBarContainerActualBg} shadow-top-sm`}>
-              {imageToSend && (
-                <div className={`mb-2 p-2.5 rounded-lg flex items-center justify-between ${isDarkMode ? 'bg-slate-700' : 'bg-slate-200'}`}>
-                  <div className="flex items-center min-w-0"> <img src={imageToSend.url} alt="Preview" className="w-11 h-11 object-cover rounded-md mr-2.5 shadow-sm flex-shrink-0"/> <span className={`text-sm ${effectiveTextColor} truncate`}>{imageToSend.file.name}</span> </div>
-                  <button onClick={() => setImageToSend(null)} className={`p-1.5 rounded-full hover:${isDarkMode ? 'bg-slate-600' : 'bg-slate-300'} ${effectiveTextColor} transition-colors flex-shrink-0 ml-2`}> <FaTimesCircle size={20}/> </button>
-                </div>
-              )}
-              <div className={`flex items-center space-x-2 p-1.5 rounded-xl shadow-sm ${inputFieldActualBgColor} border ${inputFieldActualBorderColor}`}>
-                <button onClick={() => fileInputRef.current?.click()} className={`p-2.5 rounded-lg ${currentModelSupportsImage ? `hover:${isDarkMode ?'bg-slate-600/70':'bg-slate-200/70'} cursor-pointer` : 'opacity-50 cursor-not-allowed'} ${inputFieldActualTextColor} transition-colors`} title={currentModelSupportsImage ? "画像添付" : "現在のモデルは画像に非対応です"} disabled={!currentModelSupportsImage}> <FaPaperclip size={18}/> </button>
-                <input ref={fileInputRef} id="image-upload-hidden" type="file" accept="image/*" className="hidden" onChange={handleImageFileSelect} disabled={!currentModelSupportsImage}/>
-                <input type="text" value={input} onChange={(e) => setInput(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && !isSending && sendMessage()} placeholder={currentConversation?.isGroupChat ? 'グループメッセージを送信...' : `${currentCharacterForNormalChat?.name || ''}にメッセージを送信...`} className={`flex-1 px-3 py-2.5 rounded-lg bg-transparent focus:outline-none text-sm sm:text-base ${inputFieldActualTextColor} placeholder-${isDarkMode || (lineThemeActive && isLineDark)?'text-slate-500':'text-slate-400'}`} disabled={isSending} />
-                {/* Continue conversation button removed from here */}
-                <button onClick={() => sendMessage()} disabled={isSending || (!input.trim() && !imageToSend) || (imageToSend && !currentModelSupportsImage) } className={`p-3 rounded-lg text-white transition-all duration-150 ease-in-out ${isSending || (!input.trim() && !imageToSend) || (imageToSend && !currentModelSupportsImage) ? (isDarkMode || (lineThemeActive && isLineDark)?'bg-slate-500 cursor-not-allowed':'bg-slate-400 cursor-not-allowed') : (lineThemeActive && !isLineDark ? 'bg-green-500 hover:bg-green-600 active:bg-green-700' : 'bg-indigo-500 hover:bg-indigo-600 active:bg-indigo-700')} shadow-sm`} title="送信"> {isSending ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : <FaPaperPlane size={18}/>} </button>
-              </div>
-            </div>
-          )}
         </div>
       </div>
 
@@ -1973,11 +2358,13 @@ export default function Home() {
                   <div> <label className="block text-xs font-medium">終了 (0-23時)</label> <input type="number" min="0" max="23" value={editingCharacter ? editingCharacter.activeHours.end : newCharacter.activeHours.end} onChange={(e) => { const val = parseInt(e.target.value); if (editingCharacter) setEditingCharacter({...editingCharacter, activeHours: {...editingCharacter.activeHours, end: val}}); else setNewCharacter({...newCharacter, activeHours: {...newCharacter.activeHours, end: val}}); }} className={`w-full p-2.5 border rounded-lg shadow-sm ${generalInputFieldBgColor} ${generalTextColor} ${generalBorderColor} focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors`} /> </div>
                 </div>
               )}
-              <div className="flex items-center space-x-2 pt-1"> <input type="checkbox" id="isPublicModal" checked={editingCharacter ? editingCharacter.isPublic : newCharacter.isPublic} onChange={(e) => editingCharacter ? setEditingCharacter({...editingCharacter, isPublic: e.target.checked}) : setNewCharacter({...newCharacter, isPublic: e.target.checked})} className="h-4 w-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500 cursor-pointer" /> <label htmlFor="isPublicModal" className="text-sm cursor-pointer select-none">公開キャラクター (将来用)</label> </div>
               <div className="flex items-center space-x-2 pt-1"> <input type="checkbox" id="useGaugesModal" checked={editingCharacter ? editingCharacter.useGauges : newCharacter.useGauges} onChange={(e) => editingCharacter ? setEditingCharacter({...editingCharacter, useGauges: e.target.checked}) : setNewCharacter({...newCharacter, useGauges: e.target.checked})} className="h-4 w-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500 cursor-pointer" /> <label htmlFor="useGaugesModal" className="text-sm cursor-pointer select-none">感情ゲージを使用する</label> </div>
             </div>
             <div className="mt-6 flex flex-col sm:flex-row justify-between items-center gap-3">
-              <button onClick={handleGenerateRandomCharacterInDialog} className={`px-5 py-2.5 rounded-lg border ${generalBorderColor} hover:${isDarkMode?'bg-slate-700/70':'bg-slate-100'} transition-colors duration-150 w-full sm:w-auto ${generalTextColor} font-medium shadow-sm`}> ランダム生成 </button>
+              <div className="flex gap-2 w-full sm:w-auto">
+                <button onClick={handleGenerateRandomCharacterInDialog} className={`px-5 py-2.5 rounded-lg border ${generalBorderColor} hover:${isDarkMode?'bg-slate-700/70':'bg-slate-100'} transition-colors duration-150 w-full sm:w-auto ${generalTextColor} font-medium shadow-sm`}> ランダム生成 </button>
+                <button onClick={() => setIsAIEditModalOpen(true)} disabled={!editingCharacter} className={`px-5 py-2.5 rounded-lg border ${generalBorderColor} hover:${isDarkMode?'bg-slate-700/70':'bg-slate-100'} transition-colors duration-150 w-full sm:w-auto ${generalTextColor} font-medium shadow-sm flex items-center disabled:opacity-50 disabled:cursor-not-allowed`}><FaMagic className="mr-2 text-indigo-400" /> AIで編集</button>
+              </div>
               <div className="flex flex-col sm:flex-row gap-3 sm:gap-2 w-full sm:w-auto">
                 <button onClick={() => { setShowCharacterDialog(false); setEditingCharacter(null); }} className={`px-6 py-2.5 rounded-lg border ${generalBorderColor} hover:${isDarkMode?'bg-slate-700/70':'bg-slate-100'} transition-colors duration-150 w-full sm:w-auto ${generalTextColor} font-medium shadow-sm`}> キャンセル </button>
                 <button onClick={editingCharacter ? saveCharacterEdit : addCharacter} className={`px-6 py-2.5 rounded-lg text-white font-medium ${editingCharacter ? 'bg-green-600 hover:bg-green-700 active:bg-green-800' : 'bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800'} transition-colors duration-150 w-full sm:w-auto shadow-md`}> {editingCharacter ? '保存' : '作成'} </button>
