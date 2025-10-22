@@ -35,6 +35,7 @@ const RANDOM_QUOTES = [
 const MODEL_OPTIONS = {
     'Sonoma Sky Alpha': { value: 'openrouter/sonoma-sky-alpha', description: 'OpenRouterのSonoma Sky Alphaモデル', supportsImage: false },
     'Sonoma Dusk Alpha': { value: 'openrouter/sonoma-dusk-alpha', description: 'OpenRouterのSonoma Dusk Alphaモデル', supportsImage: false },
+    'Andromeda Alpha': { value: 'openrouter/andromeda-alpha', description: 'OpenRouterのAndromeda Alphaモデル', supportsImage: false },
 };
 const LIGHT_MODE_CHAT_BACKGROUNDS = {
     'ソフトピンク': '#fff1f2',
@@ -103,7 +104,7 @@ export default function Home() {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [currentConversationId, setCurrentConversationId] = useState<string>('')
   const [input, setInput] = useState('')
-  const [model, setModel] = useState('openrouter/sonoma-sky-alpha')
+  const [model, setModel] = useState('openrouter/andromeda-alpha')
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [temperature, setTemperature] = useState(0.7)
   const [backgroundColor, setBackgroundColor] = useState('ソフトピンク')
