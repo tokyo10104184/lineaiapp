@@ -34,6 +34,7 @@ const RANDOM_QUOTES = [
 
 const MODEL_OPTIONS = {
     'Minimax M2': { value: 'minimax/minimax-m2:free', description: 'Minimax M2モデル', supportsImage: false },
+    'Polaris Alpha': { value: 'openrouter/polaris-alpha', description: 'OpenRouterのPolaris Alphaモデル', supportsImage: false },
 };
 const LIGHT_MODE_CHAT_BACKGROUNDS = {
     'ソフトピンク': '#fff1f2',
@@ -2082,7 +2083,7 @@ export default function Home() {
             <div className="flex justify-between items-center">
               <h1 className={`font-semibold text-xl flex items-center ${sidebarHeaderTextColor}`}> <FaRobot className="mr-2.5 text-2xl" /> Kint </h1>
               <div className="flex items-center space-x-2">
-                <button onClick={() => setShowSettingsModal(true)} className={`p-2 rounded-full text-xl ${sidebarHeaderTextColor} hover:bg-white/20 transition-colors duration-200`}>
+                <button onClick={() => setShowSettingsModal(true)} title="設定" className={`p-2 rounded-full text-xl ${sidebarHeaderTextColor} hover:bg-white/20 transition-colors duration-200`}>
                   <FaCog />
                 </button>
                 {sidebarOpen && (
