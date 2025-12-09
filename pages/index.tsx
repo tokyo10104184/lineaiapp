@@ -2551,6 +2551,17 @@ export default function Home() {
         .shadow-top-sm { box-shadow: 0 -1px 3px 0 rgba(0,0,0,0.03), 0 -1px 2px -1px rgba(0,0,0,0.03); }
         ${isDarkMode ? `.shadow-top-sm { box-shadow: 0 -1px 3px 0 rgba(255,255,255,0.02), 0 -1px 2px -1px rgba(255,255,255,0.01); }` : ''}
       `}</style>
+
+      <footer className={`text-center p-4 text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'} mt-auto`}>
+        <div className="space-y-1">
+          <p>Kintは、AIキャラクターとの自由な対話を楽しむためのロールプレイングアプリです。</p>
+          <p>運営者: Tokyo10104184</p>
+          <p>
+            <a href="https://docs.google.com/forms/d/e/1FAIpQLSc3222WWs054-i-p2ChEg-h-p-1Gf-o-2-3_L2-E-X-y-E-w/viewform?usp=sf_link" target="_blank" rel="noopener noreferrer" className="hover:underline">お問い合わせ</a> | プライバシーポリシー: チャットログは収集しません
+          </p>
+          <p className="font-semibold text-red-500">18歳未満の方のご利用は固く禁じます。</p>
+        </div>
+      </footer>
     </div>
   )
 }
