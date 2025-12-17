@@ -4,7 +4,7 @@ import {
     FaUserCircle, FaImage, FaPlus, FaEdit, FaTimes, FaRobot, FaTrash, FaPaperPlane,
     FaBars, FaQuestionCircle, FaPaperclip, FaTimesCircle, FaQuoteLeft, FaComments,
     FaPlay, FaStop, FaFistRaised, FaBalanceScale, FaCommentDots, FaSave, FaUndo, FaUsers, FaCog, FaChartBar, FaStore, FaMagic,
-    FaCloudUploadAlt, FaCloudDownloadAlt, FaBrain
+    FaCloudUploadAlt, FaCloudDownloadAlt, FaBrain, FaRedo
 } from 'react-icons/fa';
 import ConfirmationDialog from '../components/ui/ConfirmationDialog'; // Added import
 import GroupChatCreationModal from '../components/GroupChatCreationModal';
@@ -875,20 +875,23 @@ export default function Home() {
                 if (conv.id === currentConversationId) {
                     const messageIndex = conv.messages.findIndex(msg => msg.id === editedMessageId);
                     if (messageIndex === -1) return conv;
-                    const updatedMessages = conv.messages.map((msg, index) => {
-                      if (index === messageIndex) {
-                        return {
-                          ...msg,
-                          text: textToSend,
-                          isEditing: false,
-                          originalText: undefined, // Clear original text after successful edit
-                          timestamp: new Date(),
-                          imageUrl: localImageDataUrl,
-                        };
-                      }
-                      return msg;
-                    });
-                    return { ...conv, messages: updatedMessages };
+
+                    // Get the message being edited to preserve its properties
+                    const originalMessage = conv.messages[messageIndex];
+
+                    const updatedMessage = {
+                        ...originalMessage,
+                        text: textToSend,
+                        isEditing: false,
+                        originalText: undefined,
+                        timestamp: new Date(),
+                        imageUrl: originalMessage.imageUrl, // Preserve original image
+                    };
+
+                    // Truncate messages and add the updated one
+                    const newMessages = [...conv.messages.slice(0, messageIndex), updatedMessage];
+
+                    return { ...conv, messages: newMessages };
                 }
                 return conv;
             }));
@@ -1729,6 +1732,47 @@ export default function Home() {
 
   }, [currentConversation, currentCharacterForNormalChat, isSending, model, temperature, useCensorship, conversations, currentConversationId]);
 
+  const handleRetry = useCallback(async (aiMessageId: string) => {
+    if (!currentConversation || isSending) {
+      return;
+    }
+
+    const messageIndex = currentConversation.messages.findIndex(msg => msg.id === aiMessageId);
+
+    // Ensure the message exists and it's an AI message
+    if (messageIndex < 0) {
+      console.error("Retry impossible: AI message not found.");
+      return;
+    }
+
+    const aiMessage = currentConversation.messages[messageIndex];
+    if (aiMessage.sender === 'user') {
+        console.error("Retry impossible: The selected message is not from the AI.");
+        return;
+    }
+
+    // Find the last user message before this AI message
+    let lastUserMessage = null;
+    for (let i = messageIndex - 1; i >= 0; i--) {
+        if (currentConversation.messages[i].sender === 'user') {
+            lastUserMessage = currentConversation.messages[i];
+            break;
+        }
+    }
+
+    if (!lastUserMessage) {
+        console.error("Retry impossible: Could not find a preceding user message to retry from.");
+        // Maybe show an alert to the user
+        alert("このAIメッセージの元となったユーザーメッセージが見つからないため、再試行できません。");
+        return;
+    }
+
+    // Use the sendMessage function with the user message's ID to trigger the edit logic.
+    // This will truncate the conversation and regenerate the AI response.
+    await sendMessage(lastUserMessage.text, lastUserMessage.id);
+
+  }, [currentConversation, isSending, sendMessage]);
+
 
   const renderFormattedText = (text: string | undefined, allowCustomColor: boolean): React.ReactNode => {
     if (!text) return null;
@@ -1911,21 +1955,34 @@ export default function Home() {
                   {!msg.text && msg.imageUrl && <span className={`${messageTextColorClass} italic text-xs`}>画像</span>}
                 </div>
             )}
-            {/* Continue Conversation Button for AI messages - new position and style */}
-            {!isCurrentlyEditingThisMessage && !messageSenderIsUser && !currentConversation?.isGroupChat && !currentConversation?.isCharToCharConversation && !isSending && currentConversation?.messages[currentConversation.messages.length - 1]?.id === msg.id && (
-                <div className={`mt-1 flex ${justifyContentClass === 'justify-end' ? 'justify-end' : 'justify-start'} w-full`}>
-                    <button
-                        onClick={() => handleContinueConversation()}
-                        disabled={isSending}
-                        className={`flex items-center px-2 py-1 rounded-md text-xs ${isDarkMode ? 'text-slate-400 hover:text-slate-200 bg-slate-700/70 hover:bg-slate-600' : 'text-slate-500 hover:text-slate-700 bg-slate-200 hover:bg-slate-300'} transition-colors duration-150 opacity-70 hover:opacity-100`}
-                        title="AIに返信を続けさせる"
-                    >
-                        <FaPlay size={10} className="mr-1" />
-                        <span>生成を続ける</span>
-                    </button>
-                </div>
-            )}
+            {/* Action Buttons for AI messages */}
+            {!isCurrentlyEditingThisMessage && !messageSenderIsUser && !currentConversation?.isGroupChat && !currentConversation?.isCharToCharConversation && (
+              <div className={`mt-1 flex gap-2 ${justifyContentClass === 'justify-end' ? 'justify-end' : 'justify-start'} w-full`}>
+                {/* Retry Button - appears on hover for any AI message */}
+                <button
+                  onClick={() => handleRetry(msg.id)}
+                  disabled={isSending}
+                  className={`flex items-center px-2 py-1 rounded-md text-xs ${isDarkMode ? 'text-slate-400 hover:text-slate-200 bg-slate-700/70 hover:bg-slate-600' : 'text-slate-500 hover:text-slate-700 bg-slate-200 hover:bg-slate-300'} transition-colors duration-150 opacity-0 group-hover:opacity-100`}
+                  title="この時点からAIの応答を再生成"
+                >
+                  <FaRedo size={10} className="mr-1" />
+                  <span>再試行</span>
+                </button>
 
+                {/* Continue Conversation Button - appears only for the last AI message */}
+                {!isSending && currentConversation?.messages[currentConversation.messages.length - 1]?.id === msg.id && (
+                  <button
+                    onClick={() => handleContinueConversation()}
+                    disabled={isSending}
+                    className={`flex items-center px-2 py-1 rounded-md text-xs ${isDarkMode ? 'text-slate-400 hover:text-slate-200 bg-slate-700/70 hover:bg-slate-600' : 'text-slate-500 hover:text-slate-700 bg-slate-200 hover:bg-slate-300'} transition-colors duration-150 opacity-70 hover:opacity-100`}
+                    title="AIに返信を続けさせる"
+                  >
+                    <FaPlay size={10} className="mr-1" />
+                    <span>生成を続ける</span>
+                  </button>
+                )}
+              </div>
+            )}
 
             {!isCurrentlyEditingThisMessage && lineThemeActive && ( // Added lineThemeActive condition here
                 <div className={`text-xs mt-0.5 flex items-center ${justifyContentClass === 'justify-end' ? 'pr-1' : 'pl-1'} ${timeAndReadStatusColor}`}>
@@ -1960,7 +2017,7 @@ export default function Home() {
         </div>
       </div>
     )
-  }), [isDarkMode, lineThemeActive, effectiveTextColor, characters, currentConversation, generalTextColor, timeAndReadStatusColor, isLineDark, editingMessageId, handleCancelEditMessage, handleSaveEditMessage, handleEditMessage, currentCharacterForNormalChat, isSending, generalInputFieldBgColor, generalBorderColor, allowAICustomTextColor]); // Changed applyEmotionColorToText to allowAICustomTextColor
+  }), [isDarkMode, lineThemeActive, effectiveTextColor, characters, currentConversation, generalTextColor, timeAndReadStatusColor, isLineDark, editingMessageId, handleCancelEditMessage, handleSaveEditMessage, handleEditMessage, handleRetry, handleContinueConversation, currentCharacterForNormalChat, isSending, generalInputFieldBgColor, generalBorderColor, allowAICustomTextColor]);
 
   const getModeIcon = useCallback((mode?: 'auto' | 'battle' | 'debate') => {
     if (mode === 'battle') return <FaFistRaised className="mr-2" />;
