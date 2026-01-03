@@ -2143,7 +2143,7 @@ export default function Home() {
             <div className="flex justify-between items-center">
               <h1 className={`font-semibold text-xl flex items-center ${sidebarHeaderTextColor}`}> <FaRobot className="mr-2.5 text-2xl" /> Kint </h1>
               <div className="flex items-center space-x-2">
-                <button onClick={() => setShowSettingsModal(true)} className={`p-2 rounded-full text-xl ${sidebarHeaderTextColor} hover:bg-white/20 transition-colors duration-200`}>
+                <button onClick={() => setShowSettingsModal(true)} className={`p-2 rounded-full text-xl ${sidebarHeaderTextColor} hover:bg-white/20 transition-colors duration-200`} title="設定">
                   <FaCog />
                 </button>
                 {sidebarOpen && (
