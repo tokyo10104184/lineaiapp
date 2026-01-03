@@ -33,8 +33,7 @@ const RANDOM_QUOTES = [
 ];
 
 const MODEL_OPTIONS = {
-    'GLM-4.5-Air': { value: 'zai-org/GLM-4.5-Air', description: 'GLM-4.5-Airモデル', supportsImage: false },
-    'GPT-OSS-20B': { value: 'openai/gpt-oss-20b', description: 'GPT-OSS-20Bモデル', supportsImage: false },
+    'Mimo-V2-Flash': { value: 'xiaomi/mimo-v2-flash:free', description: 'Xiaomi Mimo-V2-Flashモデル', supportsImage: false },
 };
 const LIGHT_MODE_CHAT_BACKGROUNDS = {
     'ソフトピンク': '#fff1f2',
@@ -103,7 +102,7 @@ export default function Home() {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [currentConversationId, setCurrentConversationId] = useState<string>('')
   const [input, setInput] = useState('')
-  const [model, setModel] = useState('zai-org/GLM-4.5-Air')
+  const [model, setModel] = useState('xiaomi/mimo-v2-flash:free')
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [temperature, setTemperature] = useState(0.7)
   const [backgroundColor, setBackgroundColor] = useState('ソフトピンク')
