@@ -13,7 +13,7 @@ export async function getAiResponse(payload: ChutesApiRequestBody): Promise<stri
   const siteName = "Kint";
 
   try {
-    const response = await fetch("https://openrouter.ai/api/v1", {
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
