@@ -2,10 +2,11 @@ import Head from 'next/head';
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
     FaUserCircle, FaImage, FaPlus, FaEdit, FaTimes, FaRobot, FaTrash, FaPaperPlane,
-    FaBars, FaQuestionCircle, FaPaperclip, FaTimesCircle, FaQuoteLeft, FaComments,
+    FaBars, FaQuestionCircle, FaPaperclip, FaTimesCircle, FaComments,
     FaPlay, FaStop, FaFistRaised, FaBalanceScale, FaCommentDots, FaSave, FaUndo, FaUsers, FaCog, FaChartBar, FaStore, FaMagic,
     FaCloudUploadAlt, FaCloudDownloadAlt, FaBrain, FaRedo
 } from 'react-icons/fa';
+import { DmmBanner } from '../components/DmmBanner';
 import ConfirmationDialog from '../components/ui/ConfirmationDialog'; // Added import
 import GroupChatCreationModal from '../components/GroupChatCreationModal';
 import CharacterSelectionModal from '../components/CharacterSelectionModal';
@@ -25,12 +26,6 @@ import { Message, Character, Conversation, ChutesApiRequestBody, EmotionGauges }
 const SWIPE_THRESHOLD = 50;
 const API_MESSAGE_HISTORY_COUNT = 20;
 const MAX_AUTO_REPLY_TURNS = 10;
-
-const RANDOM_QUOTES = [
-    { quote: "未来を予測する最良の方法は、それを発明することだ。", author: "アラン・ケイ" },
-    { quote: "困難の中に機会がある。", author: "アルバート・アインシュタイン" },
-    { quote: "学べば学ぶほど、自分がどれだけ知らないかに気づく。", author: "ソクラテス" },
-];
 
 const MODEL_OPTIONS = {
     'Mimo-V2-Flash': { value: 'xiaomi/mimo-v2-flash:free', description: 'Xiaomi Mimo-V2-Flashモデル', supportsImage: false },
@@ -125,7 +120,6 @@ export default function Home() {
   // const [showEmotionIcons, setShowEmotionIcons] = useState(true); // Removed
   const [showTemperatureHelp, setShowTemperatureHelp] = useState(false);
   const [imageToSend, setImageToSend] = useState<{ file: File; url: string } | null>(null);
-  const [displayedQuote, setDisplayedQuote] = useState<{ quote: string; author: string } | null>(null);
   const [chatFontSize, setChatFontSize] = useState('text-sm'); // Added state for chat font size
   const [allowAICustomTextColor, setAllowAICustomTextColor] = useState(true); // Renamed, default true
   const [cheatMode, setCheatMode] = useState(true); // Added for gauge editing
@@ -233,7 +227,6 @@ export default function Home() {
         setIsDarkMode(data.isDarkMode || false);
         setUseCensorship(data.useCensorship || false);
         setLineThemeActive(data.lineThemeActive || false);
-        setDisplayedQuote(data.displayedQuote || null);
         setIsAutoReplying(data.isAutoReplying || false);
         setChatFontSize(data.chatFontSize || 'text-sm');
         setAllowAICustomTextColor(data.allowAICustomTextColor === undefined ? true : data.allowAICustomTextColor);
@@ -257,7 +250,6 @@ export default function Home() {
       setIsDarkMode(false);
       setUseCensorship(false);
       setLineThemeActive(false);
-      setDisplayedQuote(null);
       setIsAutoReplying(false);
     }
 
@@ -327,14 +319,14 @@ export default function Home() {
         const data = {
           conversations, characters, currentConversationId, currentCharacterId,
           backgroundColor, isDarkMode, useCensorship,
-           lineThemeActive, displayedQuote, isAutoReplying, // showEmotionIcons removed
+           lineThemeActive, isAutoReplying, // showEmotionIcons removed
           chatFontSize, // Save chat font size
            allowAICustomTextColor, // Save new setting
            cheatMode, useMemory,
         };
         localStorage.setItem('chatAppData', JSON.stringify(data));
     }
-  }, [conversations, characters, currentConversationId, currentCharacterId, backgroundColor, isDarkMode, useCensorship, lineThemeActive, displayedQuote, isAutoReplying, chatFontSize, allowAICustomTextColor, cheatMode, useMemory]);
+  }, [conversations, characters, currentConversationId, currentCharacterId, backgroundColor, isDarkMode, useCensorship, lineThemeActive, isAutoReplying, chatFontSize, allowAICustomTextColor, cheatMode, useMemory]);
 
   useEffect(() => {
     const sidebarElement = sidebarRef.current;
@@ -1611,11 +1603,6 @@ export default function Home() {
     reader.readAsDataURL(file); if (fileInputRef.current) fileInputRef.current.value = '';
   }, []);
 
-  const showRandomQuote = useCallback(() => {
-    const randomIndex = Math.floor(Math.random() * RANDOM_QUOTES.length);
-    setDisplayedQuote(RANDOM_QUOTES[randomIndex]);
-  }, []);
-
   const handleEditMessage = useCallback((messageId: string, currentText: string) => {
     setEditingMessageId(messageId);
     setEditingMessageText(currentText);
@@ -2271,13 +2258,7 @@ export default function Home() {
           <div className={`flex-1 p-4 space-y-4 overflow-y-auto ${sidebarActualPanelBgColor} pr-1 custom-scrollbar`}>
             {/* Settings moved to modal */}
             <div className={`pt-2 border-t ${generalBorderColor} mt-3`}>
-                <button onClick={showRandomQuote} className={`w-full flex items-center justify-center px-4 py-2.5 rounded-lg transition-colors duration-150 ${generalTextColor} ${isDarkMode ? 'bg-slate-700 hover:bg-slate-600 active:bg-slate-500' : 'bg-slate-100 hover:bg-slate-200 active:bg-slate-300'} font-medium shadow-sm`}> <FaQuoteLeft className="mr-2" /> 今日の名言 </button>
-                {displayedQuote && (
-                    <div className={`mt-2 p-3 rounded-lg text-xs ${isDarkMode ? 'bg-slate-700/50 border border-slate-600/50' : 'bg-slate-100/70 border border-slate-200/70'} ${generalTextColor}`}>
-                        <p className="italic">"{displayedQuote.quote}"</p>
-                        <p className="text-right mt-1 opacity-80">- {displayedQuote.author}</p>
-                    </div>
-                )}
+                <DmmBanner />
             </div>
           </div>
         </div>
