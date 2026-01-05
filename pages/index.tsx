@@ -2,10 +2,11 @@ import Head from 'next/head';
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
     FaUserCircle, FaImage, FaPlus, FaEdit, FaTimes, FaRobot, FaTrash, FaPaperPlane,
-    FaBars, FaQuestionCircle, FaPaperclip, FaTimesCircle, FaQuoteLeft, FaComments,
+    FaBars, FaQuestionCircle, FaPaperclip, FaTimesCircle, FaComments,
     FaPlay, FaStop, FaFistRaised, FaBalanceScale, FaCommentDots, FaSave, FaUndo, FaUsers, FaCog, FaChartBar, FaStore, FaMagic,
     FaCloudUploadAlt, FaCloudDownloadAlt, FaBrain, FaRedo
 } from 'react-icons/fa';
+import { DmmBanner } from '../components/DmmBanner';
 import ConfirmationDialog from '../components/ui/ConfirmationDialog'; // Added import
 import GroupChatCreationModal from '../components/GroupChatCreationModal';
 import CharacterSelectionModal from '../components/CharacterSelectionModal';
@@ -26,28 +27,16 @@ const SWIPE_THRESHOLD = 50;
 const API_MESSAGE_HISTORY_COUNT = 20;
 const MAX_AUTO_REPLY_TURNS = 10;
 
-const RANDOM_QUOTES = [
-    { quote: "未来を予測する最良の方法は、それを発明することだ。", author: "アラン・ケイ" },
-    { quote: "困難の中に機会がある。", author: "アルバート・アインシュタイン" },
-    { quote: "学べば学ぶほど、自分がどれだけ知らないかに気づく。", author: "ソクラテス" },
-];
-
 const MODEL_OPTIONS = {
     'Mimo-V2-Flash': { value: 'xiaomi/mimo-v2-flash:free', description: 'Xiaomi Mimo-V2-Flashモデル', supportsImage: false },
 };
 const LIGHT_MODE_CHAT_BACKGROUNDS = {
-    'ソフトピンク': '#fff1f2',
-    'ラベンダーブリス': '#f5f3ff',
-    'ピーチドリーム': '#fff7ed',
-    'ミスティローズ': '#ffe4e1',
-    'シャンパン': '#f7f3e9',
+    '青空': '#89C4FA', // Used for LINE theme
+    'ペールグレー': '#f1f5f9', // Default light
 };
 const DARK_MODE_CHAT_BACKGROUNDS = {
-    'ミッドナイトパープル': '#2b294a',
-    'トワイライトネイビー': '#1e293b',
-    'アメジスト': '#4c1d95',
-    'ルージュノワール': '#5c1a33',
-    'ディープインディゴ': '#312e81',
+    'ダークスレート': '#1e293b', // Default dark
+    'ナイトブラック': '#0f172a', // Root bg
 };
 // const EMOTION_COLORS = {
 //     '怒り': '#ef4444', '悲しみ': '#06b6d4', '喜び': '#eab308', '驚き': '#f97316', '平静': '#6b7280'
@@ -105,7 +94,6 @@ export default function Home() {
   const [model, setModel] = useState('xiaomi/mimo-v2-flash:free')
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [temperature, setTemperature] = useState(0.7)
-  const [backgroundColor, setBackgroundColor] = useState('ソフトピンク')
   const [characters, setCharacters] = useState<Character[]>([])
   const [currentCharacterId, setCurrentCharacterId] = useState<string>('')
   const [showCharacterDialog, setShowCharacterDialog] = useState(false)
@@ -125,7 +113,6 @@ export default function Home() {
   // const [showEmotionIcons, setShowEmotionIcons] = useState(true); // Removed
   const [showTemperatureHelp, setShowTemperatureHelp] = useState(false);
   const [imageToSend, setImageToSend] = useState<{ file: File; url: string } | null>(null);
-  const [displayedQuote, setDisplayedQuote] = useState<{ quote: string; author: string } | null>(null);
   const [chatFontSize, setChatFontSize] = useState('text-sm'); // Added state for chat font size
   const [allowAICustomTextColor, setAllowAICustomTextColor] = useState(true); // Renamed, default true
   const [cheatMode, setCheatMode] = useState(true); // Added for gauge editing
@@ -229,11 +216,9 @@ export default function Home() {
 
         setCurrentConversationId(data.currentConversationId || '');
         setCurrentCharacterId(data.currentCharacterId || '');
-        setBackgroundColor(data.backgroundColor || (data.isDarkMode ? Object.keys(DARK_MODE_CHAT_BACKGROUNDS)[0] : Object.keys(LIGHT_MODE_CHAT_BACKGROUNDS)[0]));
         setIsDarkMode(data.isDarkMode || false);
         setUseCensorship(data.useCensorship || false);
         setLineThemeActive(data.lineThemeActive || false);
-        setDisplayedQuote(data.displayedQuote || null);
         setIsAutoReplying(data.isAutoReplying || false);
         setChatFontSize(data.chatFontSize || 'text-sm');
         setAllowAICustomTextColor(data.allowAICustomTextColor === undefined ? true : data.allowAICustomTextColor);
@@ -241,7 +226,6 @@ export default function Home() {
         setUseMemory(data.useMemory === undefined ? false : data.useMemory);
       } else {
         // Set default settings for a fresh start
-        setBackgroundColor(Object.keys(LIGHT_MODE_CHAT_BACKGROUNDS)[0]);
         setChatFontSize('text-sm');
         setAllowAICustomTextColor(true);
         setCheatMode(true);
@@ -253,11 +237,9 @@ export default function Home() {
       loadedCharacters = [];
       setCurrentConversationId('');
       setCurrentCharacterId('');
-      setBackgroundColor(Object.keys(LIGHT_MODE_CHAT_BACKGROUNDS)[0]);
       setIsDarkMode(false);
       setUseCensorship(false);
       setLineThemeActive(false);
-      setDisplayedQuote(null);
       setIsAutoReplying(false);
     }
 
@@ -326,15 +308,15 @@ export default function Home() {
     if (conversations.length > 0 || characters.length > 0 || currentConversationId || currentCharacterId) {
         const data = {
           conversations, characters, currentConversationId, currentCharacterId,
-          backgroundColor, isDarkMode, useCensorship,
-           lineThemeActive, displayedQuote, isAutoReplying, // showEmotionIcons removed
+          isDarkMode, useCensorship,
+           lineThemeActive, isAutoReplying, // showEmotionIcons removed
           chatFontSize, // Save chat font size
            allowAICustomTextColor, // Save new setting
            cheatMode, useMemory,
         };
         localStorage.setItem('chatAppData', JSON.stringify(data));
     }
-  }, [conversations, characters, currentConversationId, currentCharacterId, backgroundColor, isDarkMode, useCensorship, lineThemeActive, displayedQuote, isAutoReplying, chatFontSize, allowAICustomTextColor, cheatMode, useMemory]);
+  }, [conversations, characters, currentConversationId, currentCharacterId, isDarkMode, useCensorship, lineThemeActive, isAutoReplying, chatFontSize, allowAICustomTextColor, cheatMode, useMemory]);
 
   useEffect(() => {
     const sidebarElement = sidebarRef.current;
@@ -779,7 +761,7 @@ export default function Home() {
         const creatorSystemPrompt = CREATOR_PERSONA_PROMPTS[persona];
         const messagesPayload = [
             { role: 'system', content: creatorSystemPrompt },
-            { role: 'user', content: userPrompt }
+            { role: 'user', content: userPrompt + '\n\n(重要: 生成されるシステムプロンプトは必ず日本語で出力してください。)' }
         ];
         const apiRequestBody: ChutesApiRequestBody = {
             model,
@@ -1453,9 +1435,6 @@ export default function Home() {
   }, [conversations, currentCharacterId]);
 
   const isLineDark = useMemo(() => lineThemeActive && isDarkMode, [lineThemeActive, isDarkMode]);
-  const activeChatBackgroundPalette = useMemo(() => (
-      isDarkMode ? DARK_MODE_CHAT_BACKGROUNDS : LIGHT_MODE_CHAT_BACKGROUNDS
-  ), [isDarkMode]);
   const generalTextColor = useMemo(() => (isDarkMode ? 'text-slate-200' : 'text-slate-700'), [isDarkMode]);
   const generalPanelBgColor = useMemo(() => (isDarkMode ? 'bg-slate-800' : 'bg-white'), [isDarkMode]);
   const generalInputFieldBgColor = useMemo(() => (isDarkMode ? 'bg-slate-700' : 'bg-slate-100'), [isDarkMode]);
@@ -1467,8 +1446,8 @@ export default function Home() {
   const chatMessagesListActualBg = useMemo(() => (
     lineThemeActive
       ? (isLineDark ? DARK_MODE_CHAT_BACKGROUNDS['ダークスレート'] : LIGHT_MODE_CHAT_BACKGROUNDS['青空'])
-      : (activeChatBackgroundPalette[backgroundColor as keyof typeof activeChatBackgroundPalette] || (isDarkMode ? DARK_MODE_CHAT_BACKGROUNDS['ダークスレート'] : LIGHT_MODE_CHAT_BACKGROUNDS['ペールグレー']))
-  ), [lineThemeActive, isLineDark, activeChatBackgroundPalette, backgroundColor, isDarkMode]);
+      : (isDarkMode ? DARK_MODE_CHAT_BACKGROUNDS['ダークスレート'] : LIGHT_MODE_CHAT_BACKGROUNDS['ペールグレー'])
+  ), [lineThemeActive, isLineDark, isDarkMode]);
   const chatHeaderActualBgClass = useMemo(() => (
       lineThemeActive ? '' : (isDarkMode ? 'bg-slate-800' : 'bg-white')
   ), [lineThemeActive, isDarkMode]);
@@ -1609,11 +1588,6 @@ export default function Home() {
     const reader = new FileReader();
     reader.onload = (event) => { const imageUrl = event.target?.result as string; setImageToSend({ file, url: imageUrl }); };
     reader.readAsDataURL(file); if (fileInputRef.current) fileInputRef.current.value = '';
-  }, []);
-
-  const showRandomQuote = useCallback(() => {
-    const randomIndex = Math.floor(Math.random() * RANDOM_QUOTES.length);
-    setDisplayedQuote(RANDOM_QUOTES[randomIndex]);
   }, []);
 
   const handleEditMessage = useCallback((messageId: string, currentText: string) => {
@@ -1882,7 +1856,7 @@ export default function Home() {
 
     let bubbleClass = ''; let messageTextColorClass = effectiveTextColor;
     let messageContainerClass = `max-w-[90%] sm:max-w-[85%] flex ${justifyContentClass === 'justify-end' ? 'flex-row-reverse' : 'flex-row'}`;
-    let messageContentContainerClass = `flex flex-col w-full ${justifyContentClass === 'justify-end' ? 'items-end' : 'items-start'}`;
+    let messageContentContainerClass = `flex ${justifyContentClass === 'justify-end' ? 'flex-row-reverse items-end' : 'flex-row items-end'} gap-2 w-full`;
     let messageWrapperDivClass = `flex ${justifyContentClass} mb-1.5 px-2 group relative`;
 
     if (lineThemeActive) {
@@ -1916,12 +1890,6 @@ export default function Home() {
             ) : null}
           </div>
           <div className={messageContentContainerClass}>
-             {characterForMessage && !messageSenderIsUser && !isCurrentlyEditingThisMessage && (
-                <span className={`text-xs mb-0.5 ${lineThemeActive ? (isLineDark ? 'text-slate-400' : 'text-slate-600') : (isDarkMode ? 'text-slate-400' : 'text-slate-500')} opacity-90 px-1`}>
-                    {characterForMessage.name}
-                    {/* Emotion icon display removed */}
-                </span>
-            )}
             {isCurrentlyEditingThisMessage ? (
                 <div className={`w-full p-2 rounded-lg shadow-md ${isDarkMode ? 'bg-slate-600' : 'bg-slate-100'}`}>
                     <textarea
@@ -1961,7 +1929,7 @@ export default function Home() {
                 <button
                   onClick={() => handleRetry(msg.id)}
                   disabled={isSending}
-                  className={`flex items-center px-2 py-1 rounded-md text-xs ${isDarkMode ? 'text-slate-400 hover:text-slate-200 bg-slate-700/70 hover:bg-slate-600' : 'text-slate-500 hover:text-slate-700 bg-slate-200 hover:bg-slate-300'} transition-colors duration-150 opacity-0 group-hover:opacity-100`}
+                  className={`flex items-center px-2 py-1 rounded-md text-xs ${isDarkMode ? 'text-slate-400 hover:text-slate-200 bg-slate-700/70 hover:bg-slate-600' : 'text-slate-500 hover:text-slate-700 bg-slate-200 hover:bg-slate-300'} transition-colors duration-150 opacity-80 hover:opacity-100`}
                   title="この時点からAIの応答を再生成"
                 >
                   <FaRedo size={10} className="mr-1" />
@@ -1983,37 +1951,35 @@ export default function Home() {
               </div>
             )}
 
-            {!isCurrentlyEditingThisMessage && lineThemeActive && ( // Added lineThemeActive condition here
-                <div className={`text-xs mt-0.5 flex items-center ${justifyContentClass === 'justify-end' ? 'pr-1' : 'pl-1'} ${timeAndReadStatusColor}`}>
-                {msg.sender === 'user' && ( <span className={`mr-1.5 ${msg.isRead ? timeAndReadStatusColor : 'text-transparent'}`}> {msg.isRead ? '既読' : '送信済'} </span> )}
-                <span>{formatTime(msg.timestamp)}</span>
-                {/* Edit button is kept for both modes for now, can be conditionalized if needed */}
-                {msg.sender === 'user' && !currentConversation?.isCharToCharConversation && !isSending && (
-                    <button
-                        onClick={() => handleEditMessage(msg.id, msg.text)}
-                        className={`p-1 rounded-full ml-2 ${isDarkMode ? 'text-slate-400 hover:text-slate-200 hover:bg-slate-700' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-300'} transition-colors`}
-                        title="編集"
-                    >
-                        <FaEdit size={12} />
-                    </button>
-                )}
+            {/* Timestamp and Status - Now side-by-side with bubble for all themes to avoid wrapping */}
+            {!isCurrentlyEditingThisMessage && (
+                <div className={`text-xs flex flex-col justify-end whitespace-nowrap ${justifyContentClass === 'justify-end' ? 'items-end' : 'items-start'} ${timeAndReadStatusColor} flex-shrink-0`}>
+                    {lineThemeActive && msg.sender === 'user' && ( <span className={`mb-0.5 ${msg.isRead ? timeAndReadStatusColor : 'text-transparent'}`}> {msg.isRead ? '既読' : '送信済'} </span> )}
+                    <span>{formatTime(msg.timestamp)}</span>
+                     {msg.sender === 'user' && !currentConversation?.isCharToCharConversation && !isSending && (
+                        <button
+                            onClick={() => handleEditMessage(msg.id, msg.text)}
+                            className={`mt-1 p-1 rounded-full ${isDarkMode ? 'text-slate-400 hover:text-slate-200 hover:bg-slate-700' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-300'} transition-colors`}
+                            title="編集"
+                        >
+                            <FaEdit size={10} />
+                        </button>
+                    )}
                 </div>
-            )}
-            {/* Placeholder for non-LINE UI edit button or other actions if needed, or remove if edit button stays in the block above */}
-            {!isCurrentlyEditingThisMessage && !lineThemeActive && msg.sender === 'user' && !currentConversation?.isCharToCharConversation && !isSending && (
-                 <div className={`text-xs mt-0.5 flex items-center ${justifyContentClass === 'justify-end' ? 'pr-1' : 'pl-1'} ${timeAndReadStatusColor}`}>
-                    {/* Empty div to maintain structure or add non-LINE specific footer items later */}
-                     <button
-                        onClick={() => handleEditMessage(msg.id, msg.text)}
-                        className={`p-1 rounded-full ml-2 ${isDarkMode ? 'text-slate-400 hover:text-slate-200 hover:bg-slate-700' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-300'} transition-colors`}
-                        title="編集"
-                    >
-                        <FaEdit size={12} />
-                    </button>
-                 </div>
             )}
           </div>
         </div>
+        {/* Character Name for non-user messages, placed below the avatar/bubble group if needed, or above.
+            Currently removing it from above bubble to match LINE style more,
+            but if user wants it, we can re-add it outside the flex row or above the bubble inside the flex-col if we reverted.
+            For now, simpler is better for "no wrapping".
+            If we want name, it should probably be above the bubble row.
+        */}
+        {characterForMessage && !messageSenderIsUser && !isCurrentlyEditingThisMessage && (
+             <div className={`absolute -top-5 left-12 text-xs ${lineThemeActive ? (isLineDark ? 'text-slate-400' : 'text-slate-600') : (isDarkMode ? 'text-slate-400' : 'text-slate-500')} opacity-90 px-1 truncate max-w-[200px]`}>
+                {characterForMessage.name}
+            </div>
+        )}
       </div>
     )
   }), [isDarkMode, lineThemeActive, effectiveTextColor, characters, currentConversation, generalTextColor, timeAndReadStatusColor, isLineDark, editingMessageId, handleCancelEditMessage, handleSaveEditMessage, handleEditMessage, handleRetry, handleContinueConversation, currentCharacterForNormalChat, isSending, generalInputFieldBgColor, generalBorderColor, allowAICustomTextColor]);
@@ -2138,7 +2104,7 @@ export default function Home() {
             ${sidebarActualPanelBgColor} border-r ${sidebarActualBorderColor}
             overflow-hidden flex flex-col shadow-2xl lg:shadow-xl h-full
         `}>
-          <div className={`p-4 border-b ${sidebarActualBorderColor} bg-gradient-to-br from-indigo-600 to-purple-700`}>
+          <div className={`p-4 border-b ${sidebarActualBorderColor} ${isDarkMode ? 'bg-gradient-to-br from-slate-800 to-slate-900' : 'bg-gradient-to-br from-indigo-600 to-purple-700'}`}>
             <div className="flex justify-between items-center">
               <h1 className={`font-semibold text-xl flex items-center ${sidebarHeaderTextColor}`}> <FaRobot className="mr-2.5 text-2xl" /> Kint </h1>
               <div className="flex items-center space-x-2">
@@ -2271,13 +2237,7 @@ export default function Home() {
           <div className={`flex-1 p-4 space-y-4 overflow-y-auto ${sidebarActualPanelBgColor} pr-1 custom-scrollbar`}>
             {/* Settings moved to modal */}
             <div className={`pt-2 border-t ${generalBorderColor} mt-3`}>
-                <button onClick={showRandomQuote} className={`w-full flex items-center justify-center px-4 py-2.5 rounded-lg transition-colors duration-150 ${generalTextColor} ${isDarkMode ? 'bg-slate-700 hover:bg-slate-600 active:bg-slate-500' : 'bg-slate-100 hover:bg-slate-200 active:bg-slate-300'} font-medium shadow-sm`}> <FaQuoteLeft className="mr-2" /> 今日の名言 </button>
-                {displayedQuote && (
-                    <div className={`mt-2 p-3 rounded-lg text-xs ${isDarkMode ? 'bg-slate-700/50 border border-slate-600/50' : 'bg-slate-100/70 border border-slate-200/70'} ${generalTextColor}`}>
-                        <p className="italic">"{displayedQuote.quote}"</p>
-                        <p className="text-right mt-1 opacity-80">- {displayedQuote.author}</p>
-                    </div>
-                )}
+                <DmmBanner />
             </div>
           </div>
         </div>

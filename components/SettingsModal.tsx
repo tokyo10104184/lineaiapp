@@ -19,10 +19,6 @@ interface SettingsModalProps {
   setAllowAICustomTextColor: (allowAICustomTextColor: boolean) => void;
   chatFontSize: string;
   setChatFontSize: (chatFontSize: string) => void;
-  backgroundColor: string;
-  setBackgroundColor: (backgroundColor: string) => void;
-  lightModeBackgrounds: any;
-  darkModeBackgrounds: any;
   modelOptions: any;
   cheatMode: boolean;
   setCheatMode: (value: boolean) => void;
@@ -46,10 +42,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   setAllowAICustomTextColor,
   chatFontSize,
   setChatFontSize,
-  backgroundColor,
-  setBackgroundColor,
-  lightModeBackgrounds,
-  darkModeBackgrounds,
   modelOptions,
   cheatMode,
   setCheatMode,
@@ -64,7 +56,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   const textColor = isDarkMode ? 'text-slate-200' : 'text-slate-700';
   const inputBgColor = isDarkMode ? 'bg-slate-700' : 'bg-slate-100';
   const borderColor = isDarkMode ? 'border-slate-600' : 'border-slate-300';
-  const activeChatBackgroundPalette = isDarkMode ? darkModeBackgrounds : lightModeBackgrounds;
 
   const SettingSection: React.FC<{ title: string, children: React.ReactNode }> = ({ title, children }) => (
     <div className="space-y-4">
@@ -165,17 +156,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 <option value="text-base">標準</option>
                 <option value="text-lg">大</option>
               </select>
-            </div>
-             <div>
-              <label className={`block text-sm font-medium mb-1.5`}>チャット背景色</label>
-              <select
-                className={`w-full px-3 py-2.5 border rounded-lg text-sm shadow-sm ${inputBgColor} ${textColor} ${borderColor} focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors ${lineThemeActive ? 'opacity-50 cursor-not-allowed' : ''}`}
-                value={backgroundColor}
-                onChange={(e) => setBackgroundColor(e.target.value)}
-                disabled={lineThemeActive} >
-                {Object.keys(activeChatBackgroundPalette).map((colorName) => ( <option key={colorName} value={colorName}> {colorName} </option> ))}
-              </select>
-              {lineThemeActive && <p className={`text-xs mt-1.5 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>LINE風テーマ有効時は固定されます。</p>}
             </div>
           </SettingSection>
 
