@@ -27,9 +27,6 @@ export interface Character {
   name: string
   description: string
   systemPrompt: string
-  color: string
-  activeHours: { start: number; end: number }
-  useActiveHours: boolean
   icon: string
   isPublic: boolean
   gauges: EmotionGauges;

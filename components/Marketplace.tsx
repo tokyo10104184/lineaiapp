@@ -3,7 +3,7 @@ import { FaDownload, FaSync, FaUser, FaHeart } from 'react-icons/fa';
 import { Character } from '../lib/types'; // Using full Character type for now
 
 // A type for the card, which might have a subset of full character data
-export type PublicCharacterCard = Pick<Character, 'id' | 'name' | 'description' | 'icon' | 'color' | 'use_gauges'> & {
+export type PublicCharacterCard = Pick<Character, 'id' | 'name' | 'description' | 'icon' | 'use_gauges'> & {
   likes_count?: number;
   username: string | null;
 };
@@ -99,8 +99,12 @@ const Marketplace: React.FC<MarketplaceProps> = ({ onImport, isDarkMode }) => {
                     <div key={char.id} className={`rounded-lg shadow-lg flex flex-col ${cardBgColor}`}>
                         <div className="p-5 flex-grow">
                             <div className="flex items-start">
-                                <div className="text-5xl w-16 h-16 mr-4 rounded-full flex items-center justify-center shadow-md flex-shrink-0" style={{ backgroundColor: char.color || '#A0AEC0' }}>
-                                    {char.icon}
+                                <div className="w-16 h-16 mr-4 rounded-full flex items-center justify-center shadow-md flex-shrink-0 overflow-hidden bg-gray-300">
+                                    {char.icon?.startsWith('data:') || char.icon?.startsWith('http') ? (
+                                        <img src={char.icon} alt={char.name} className="w-full h-full object-cover" />
+                                    ) : (
+                                        <div className="text-5xl">{char.icon || '👤'}</div>
+                                    )}
                                 </div>
                                 <div className="min-w-0">
                                     <h3 className="font-bold text-lg truncate">{char.name}</h3>

@@ -41,10 +41,13 @@ const CharacterSelectionModal: React.FC<CharacterSelectionModalProps> = ({
               onClick={() => onSelectCharacter(char.id)}
             >
               <div
-                className="text-6xl w-24 h-24 mx-auto rounded-full flex items-center justify-center mb-4 shadow-md"
-                style={{ backgroundColor: char.color || '#A0AEC0' }}
+                className="w-24 h-24 mx-auto rounded-full flex items-center justify-center mb-4 shadow-md overflow-hidden bg-gray-300"
               >
-                {char.icon}
+                {char.icon?.startsWith('data:') || char.icon?.startsWith('http') ? (
+                  <img src={char.icon} alt={char.name} className="w-full h-full object-cover" />
+                ) : (
+                  <div className="text-6xl">{char.icon || '👤'}</div>
+                )}
               </div>
               <h3 className="font-bold text-xl">{char.name}</h3>
               <p className="text-sm opacity-80 mt-1">{char.description}</p>
