@@ -2063,10 +2063,6 @@ export default function Home() {
         setAllowAICustomTextColor={setAllowAICustomTextColor}
         chatFontSize={chatFontSize}
         setChatFontSize={setChatFontSize}
-        backgroundColor={backgroundColor}
-        setBackgroundColor={setBackgroundColor}
-        lightModeBackgrounds={LIGHT_MODE_CHAT_BACKGROUNDS}
-        darkModeBackgrounds={DARK_MODE_CHAT_BACKGROUNDS}
         modelOptions={MODEL_OPTIONS}
         cheatMode={cheatMode}
         setCheatMode={setCheatMode}
