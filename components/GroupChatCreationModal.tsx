@@ -5,7 +5,6 @@ interface Character {
   id: string;
   name: string;
   icon: string;
-  color: string;
 }
 
 interface GroupChatCreationModalProps {
@@ -121,11 +120,12 @@ const GroupChatCreationModal: React.FC<GroupChatCreationModalProps> = ({
                         disabled={selectedCharacterIds.length >= 5 && !selectedCharacterIds.includes(char.id)}
                     />
                     <div className="flex items-center min-w-0">
-                        <div
-                        className="text-xl w-8 h-8 flex items-center justify-center rounded-full shadow-sm mr-2.5 shrink-0"
-                        style={{ backgroundColor: char.color || '#A0AEC0' }}
-                        >
-                        {char.icon}
+                        <div className="w-8 h-8 flex items-center justify-center rounded-full shadow-sm mr-2.5 shrink-0 overflow-hidden bg-gray-300">
+                          {char.icon?.startsWith('data:') || char.icon?.startsWith('http') ? (
+                            <img src={char.icon} alt={char.name} className="w-full h-full object-cover" />
+                          ) : (
+                            <span className="text-xl">{char.icon || '👤'}</span>
+                          )}
                         </div>
                         <span className="text-sm font-medium truncate" title={char.name}>{char.name}</span>
                     </div>

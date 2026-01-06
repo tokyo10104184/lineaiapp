@@ -7,7 +7,7 @@ import {
     FaCloudUploadAlt, FaCloudDownloadAlt, FaBrain, FaRedo
 } from 'react-icons/fa';
 import { DmmBanner } from '../components/DmmBanner';
-import ConfirmationDialog from '../components/ui/ConfirmationDialog'; // Added import
+import ConfirmationDialog from '../components/ui/ConfirmationDialog';
 import GroupChatCreationModal from '../components/GroupChatCreationModal';
 import CharacterSelectionModal from '../components/CharacterSelectionModal';
 import NewCharacterChoiceModal from '../components/NewCharacterChoiceModal';
@@ -18,9 +18,11 @@ import QuickCreateCharacterModal, { CreatorPersona } from '../components/QuickCr
 import Marketplace from '../components/Marketplace';
 import AuthModal from '../components/AuthModal';
 import UserMenu from '../components/UserMenu';
+import MessageItem from '../components/MessageItem';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { FORMATTING_INSTRUCTIONS_PROMPT, CREATOR_PERSONA_PROMPTS } from '../lib/prompts';
 import { Message, Character, Conversation, ChutesApiRequestBody, EmotionGauges } from '../lib/types';
+import { renderFormattedText } from '../lib/utils';
 
 // --- Constants ---
 const SWIPE_THRESHOLD = 50;
@@ -38,12 +40,7 @@ const DARK_MODE_CHAT_BACKGROUNDS = {
     'ダークスレート': '#1e293b', // Default dark
     'ナイトブラック': '#0f172a', // Root bg
 };
-// const EMOTION_COLORS = {
-//     '怒り': '#ef4444', '悲しみ': '#06b6d4', '喜び': '#eab308', '驚き': '#f97316', '平静': '#6b7280'
-// };
-// const EMOTION_EMOJIS = {
-//     '怒り': '😠', '悲しみ': '😢', '喜び': '😊', '驚き': '😲', '平静': '🙂'
-// };
+
 const QUICK_MESSAGES = [
     { id: '1', text: 'こんにちは！' }, { id: '2', text: 'ありがとう！' }, { id: '3', text: 'いいね' }
 ];
@@ -52,6 +49,8 @@ const DEFAULT_GAUGES: EmotionGauges = {
   intimacy: 20, trust: 20, mood: 20, dependence: 20, excitement: 20,
   jealousy: 20, curiosity: 20, comfort: 20, pleasure: 20
 };
+
+const PLACEHOLDER_ICON = '/default_icons/placeholder.png'; // Fallback icon
 
 // --- Helper Functions ---
 const formatTime = (date: Date | string): string => {
@@ -63,11 +62,6 @@ const formatTime = (date: Date | string): string => {
     return '--:--'
   }
 };
-
-// const extractEmotion = (text: string): string => {
-//   const emotionMatch = text.match(/\[感情:(.+?)\]/);
-//   return emotionMatch ? emotionMatch[1] : '平静';
-// };
 
 const cleanAIReply = (reply: string): string => {
   let cleanedReply = reply;
@@ -104,19 +98,18 @@ export default function Home() {
   const [isSending, setIsSending] = useState(false)
   const [useCensorship, setUseCensorship] = useState(false)
   const [newCharacter, setNewCharacter] = useState<Partial<Character>>({
-    name: '', description: '', systemPrompt: '', color: '#6366f1',
-    activeHours: { start: 0, end: 23 }, useActiveHours: false, icon: '👤', isPublic: false,
+    name: '', description: '', systemPrompt: '',
+    icon: PLACEHOLDER_ICON, isPublic: false,
     gauges: DEFAULT_GAUGES,
     useGauges: true,
   });
   const [lineThemeActive, setLineThemeActive] = useState(false);
-  // const [showEmotionIcons, setShowEmotionIcons] = useState(true); // Removed
   const [showTemperatureHelp, setShowTemperatureHelp] = useState(false);
   const [imageToSend, setImageToSend] = useState<{ file: File; url: string } | null>(null);
-  const [chatFontSize, setChatFontSize] = useState('text-sm'); // Added state for chat font size
-  const [allowAICustomTextColor, setAllowAICustomTextColor] = useState(true); // Renamed, default true
-  const [cheatMode, setCheatMode] = useState(true); // Added for gauge editing
-  const [useMemory, setUseMemory] = useState(false); // For long-term memory feature
+  const [chatFontSize, setChatFontSize] = useState('text-sm');
+  const [allowAICustomTextColor, setAllowAICustomTextColor] = useState(true);
+  const [cheatMode, setCheatMode] = useState(true);
+  const [useMemory, setUseMemory] = useState(false);
 
   const [showCharToCharSelectModal, setShowCharToCharSelectModal] = useState(false);
   const [charToCharCandidates, setCharToCharCandidates] = useState<[string | null, string | null]>([null, null]);
@@ -135,9 +128,9 @@ export default function Home() {
 
   const [showDeleteConversationDialog, setShowDeleteConversationDialog] = useState(false);
   const [conversationToDeleteId, setConversationToDeleteId] = useState<string | null>(null);
-  const [showDeleteCharacterDialog, setShowDeleteCharacterDialog] = useState(false); // Added state
-  const [characterToDeleteId, setCharacterToDeleteId] = useState<string | null>(null); // Added state
-  const [characterDeleteMessage, setCharacterDeleteMessage] = useState(''); // Added state
+  const [showDeleteCharacterDialog, setShowDeleteCharacterDialog] = useState(false);
+  const [characterToDeleteId, setCharacterToDeleteId] = useState<string | null>(null);
+  const [characterDeleteMessage, setCharacterDeleteMessage] = useState('');
   const [showGroupChatModal, setShowGroupChatModal] = useState(false);
   const [showCharacterSelection, setShowCharacterSelection] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
@@ -156,6 +149,7 @@ export default function Home() {
   const touchStartY = useRef<number | null>(null);
   const lastMessageCountRef = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const characterIconInputRef = useRef<HTMLInputElement>(null);
   const prevConvIdRef = useRef<string | null>(null);
 
   const generateSystemPrompt = useCallback((name: string, description: string) => {
@@ -203,10 +197,7 @@ export default function Home() {
             ...char,
             description: char.description || '',
             systemPrompt: char.systemPrompt || '',
-            color: char.color || '#6366f1',
-            icon: char.icon || '👤',
-            activeHours: char.activeHours || { start: 0, end: 23 },
-            useActiveHours: char.useActiveHours === undefined ? false : char.useActiveHours,
+            icon: char.icon || PLACEHOLDER_ICON,
             isPublic: char.isPublic === undefined ? false : char.isPublic,
             public_id: char.public_id || null,
             gauges: char.gauges || DEFAULT_GAUGES,
@@ -250,10 +241,7 @@ export default function Home() {
           name: 'ユキ',
           description: '物静かでミステリアスな文学少女。',
           systemPrompt: generateSystemPrompt('ユキ', '物静かで、少し影のある文学少女。言葉数は少ないが、時折核心を突くことを言う。'),
-          color: '#a78bfa',
           icon: '❄️',
-          activeHours: { start: 20, end: 2 },
-          useActiveHours: true,
           isPublic: true,
           gauges: DEFAULT_GAUGES,
           useGauges: true,
@@ -263,10 +251,7 @@ export default function Home() {
           name: 'アイリ',
           description: 'いつも明るく元気なスポーツ好き。',
           systemPrompt: generateSystemPrompt('アイリ', 'いつも笑顔で元気いっぱい。少しおっちょこちょいなところもあるが、太陽のような明るさで周りを照らす。'),
-          color: '#f472b6',
           icon: '☀️',
-          activeHours: { start: 7, end: 22 },
-          useActiveHours: true,
           isPublic: true,
           gauges: DEFAULT_GAUGES,
           useGauges: true,
@@ -276,10 +261,7 @@ export default function Home() {
           name: 'ミオ',
           description: '優しくて面倒見の良いお姉さんタイプ。',
           systemPrompt: generateSystemPrompt('ミオ', '包み込むような優しさを持つ、お姉さん的存在。聞き上手で、いつもあなたのことを気遣ってくれる。'),
-          color: '#86efac',
           icon: '🌸',
-          activeHours: { start: 9, end: 23 },
-          useActiveHours: false,
           isPublic: true,
           gauges: DEFAULT_GAUGES,
           useGauges: true,
@@ -289,10 +271,7 @@ export default function Home() {
           name: 'リナ',
           description: 'ツンとした態度だけど、実は甘えん坊？',
           systemPrompt: generateSystemPrompt('リナ', '普段はツンと澄ましているが、心を許した相手にはデレっと甘える一面も。素直になれないことが多い。'),
-          color: '#fca5a5',
           icon: '츤',
-          activeHours: { start: 10, end: 24 },
-          useActiveHours: false,
           isPublic: true,
           gauges: DEFAULT_GAUGES,
           useGauges: true,
@@ -371,13 +350,6 @@ export default function Home() {
     lastMessageCountRef.current = messageCount; prevConvIdRef.current = currentConversationId;
   }, [currentConversation?.messages, currentConversationId, currentConversation?.isCharToCharConversation]);
 
-  const isCharacterActive = useCallback((characterToCheck?: Character) => {
-    const char = characterToCheck || currentCharacterForNormalChat;
-    if (!char || !char.useActiveHours) return true
-    const currentHour = new Date().getHours(); const { start, end } = char.activeHours
-    return start <= end ? (currentHour >= start && currentHour <= end) : (currentHour >= start || currentHour <= end)
-  }, [currentCharacterForNormalChat]);
-
   const createNewConversation = useCallback((charIdToConverseWith?: string) => {
     const targetCharId = charIdToConverseWith || currentCharacterId;
     if (!targetCharId) return;
@@ -435,33 +407,24 @@ export default function Home() {
     if (currentConversation?.isCharToCharConversation) return;
     if (currentConversation?.isGroupChat) return;
 
-    // This effect should only run to manage conversations for an *existing* character selection.
-    // It should not be responsible for the initial character selection.
-
-    // If a character ID is set, but that character doesn't exist (e.g., deleted),
-    // then reset the character selection. This allows the "Start" screen to show.
     if (currentCharacterId && characters.length > 0 && !characters.some(c => c.id === currentCharacterId)) {
         setCurrentCharacterId('');
         setCurrentConversationId(''); // Also clear conversation
         return;
     }
 
-    // If there are no characters at all, ensure everything is cleared.
     if (characters.length === 0) {
         setCurrentCharacterId('');
         setCurrentConversationId('');
         return;
     }
 
-    // If a valid character is selected, ensure they have a conversation.
     if (currentCharacterId) {
       const charConversations = conversations.filter(c => c.characterId === currentCharacterId && !c.isCharToCharConversation)
                                           .sort((a, b) => parseInt(b.id) - parseInt(a.id));
       if (charConversations.length === 0) {
-          // Only create a new conversation if one doesn't exist for this character.
           createNewConversation(currentCharacterId);
       } else {
-          // If the current conversation isn't for the selected character, switch to their latest one.
           if (!currentConversationId || !charConversations.some(c => c.id === currentConversationId)) {
               setCurrentConversationId(charConversations[0].id);
           }
@@ -500,10 +463,7 @@ export default function Home() {
       name: newCharacter.name,
       description: charDescription,
       systemPrompt: charSystemPrompt,
-      color: newCharacter.color || '#6366f1',
-      activeHours: newCharacter.activeHours || { start: 0, end: 23 },
-      useActiveHours: newCharacter.useActiveHours || false,
-      icon: newCharacter.icon || '👤',
+      icon: newCharacter.icon || PLACEHOLDER_ICON,
       isPublic: newCharacter.isPublic || false,
       gauges: newCharacter.gauges || DEFAULT_GAUGES,
       useGauges: newCharacter.useGauges === undefined ? true : newCharacter.useGauges,
@@ -532,7 +492,6 @@ export default function Home() {
             }
 
             const publishedCharacter = await response.json();
-            // Update the local character with the public_id from the database
             character.public_id = publishedCharacter.id;
 
             console.log('Character published successfully!', publishedCharacter);
@@ -540,16 +499,15 @@ export default function Home() {
         } catch (error) {
             console.error(error);
             alert(`キャラクターの公開に失敗しました: ${(error as Error).message}`);
-            // Don't add the character locally if publishing fails, to avoid inconsistency.
             return;
         }
       }
     }
 
     setCharacters(prev => [character, ...prev]);
-    setNewCharacter({ name: '', description: '', systemPrompt: '', color: '#6366f1', activeHours: { start: 0, end: 23 }, useActiveHours: false, icon: '👤', isPublic: false, gauges: DEFAULT_GAUGES, useGauges: true });
+    setNewCharacter({ name: '', description: '', systemPrompt: '', icon: PLACEHOLDER_ICON, isPublic: false, gauges: DEFAULT_GAUGES, useGauges: true });
     setShowCharacterDialog(false); if (window.innerWidth < 1024) setSidebarOpen(false);
-  }, [newCharacter, generateSystemPrompt]);
+  }, [newCharacter, generateSystemPrompt, session]);
 
   const saveCharacterEdit = useCallback(async () => {
     if (!editingCharacter || !editingCharacter.name?.trim()) return;
@@ -559,20 +517,18 @@ export default function Home() {
       systemPrompt: editingCharacter.systemPrompt || generateSystemPrompt(editingCharacter.name, charDescription),
     };
 
-    // This variable will hold the final character data to be set in the state
     let finalCharacterData = { ...updatedCharacterData };
 
     if (finalCharacterData.isPublic) {
       if (!session) {
         alert('キャラクターを公開するにはログインが必要です。公開設定はオフのまま保存されます。');
-        finalCharacterData.isPublic = false; // Uncheck isPublic if not logged in
+        finalCharacterData.isPublic = false;
       } else {
         try {
-            // Use public_id for the 'id' field in the payload
             const publicCharacterPayload = { ...finalCharacterData, id: finalCharacterData.public_id };
 
             const response = await fetch('/api/public-characters', {
-                method: 'POST', // The API route handles this via upsert
+                method: 'POST',
                 headers: {
                   'Content-Type': 'application/json',
                   'Authorization': `Bearer ${session.access_token}`,
@@ -586,7 +542,6 @@ export default function Home() {
             }
 
             const publishedCharacter = await response.json();
-            // Update the character data with the returned public_id
             finalCharacterData.public_id = publishedCharacter.id;
 
             console.log('Character updated and published successfully!', publishedCharacter);
@@ -594,15 +549,13 @@ export default function Home() {
         } catch (error) {
             console.error(error);
             alert(`キャラクターの公開/更新に失敗しました: ${(error as Error).message}`);
-            // If publishing fails, we can decide to either save locally without the public flag
-            // or block the save entirely. For now, we'll just alert.
         }
       }
     }
 
     setCharacters(prev => prev.map(char => char.id === finalCharacterData.id ? finalCharacterData : char));
     setEditingCharacter(null); setShowCharacterDialog(false);
-  }, [editingCharacter, generateSystemPrompt]);
+  }, [editingCharacter, generateSystemPrompt, session]);
 
   const switchToCharacter = useCallback((characterId: string) => {
     setCurrentCharacterId(characterId);
@@ -611,13 +564,12 @@ export default function Home() {
 
   const generateRandomCharacterValues = useCallback(() => {
     const names = ['ミライ', 'ハルカ', 'ソラ', 'アオイ', 'コウセイ']; const descriptions = ['元気で明るい', 'クールで落ち着いた', '神秘的', '知的で冷静', '優しい'];
-    const colors = ['#ef4444', '#22c55e', '#f59e0b', '#8b5cf6', '#06b6d4']; const icons = ['👩', '👨', '👧', '👦', '🤖'];
+    const icons = ['👩', '👨', '👧', '👦', '🤖'];
     const randomName = names[Math.floor(Math.random() * names.length)]; const randomDescription = descriptions[Math.floor(Math.random() * descriptions.length)];
     return {
       name: randomName, description: randomDescription, icon: icons[Math.floor(Math.random() * icons.length)],
       systemPrompt: generateSystemPrompt(randomName, randomDescription),
-      color: colors[Math.floor(Math.random() * colors.length)], activeHours: { start: 8, end: 22 },
-      useActiveHours: Math.random() > 0.5, isPublic: Math.random() > 0.5
+      isPublic: Math.random() > 0.5
     };
   }, [generateSystemPrompt]);
 
@@ -640,7 +592,6 @@ export default function Home() {
 
     try {
       if (character.isPublic && character.public_id) {
-        // --- Unpublish ---
         const response = await fetch('/api/public-characters/publish', {
           method: 'DELETE',
           headers: {
@@ -660,7 +611,6 @@ export default function Home() {
         ));
 
       } else {
-        // --- Publish ---
         const response = await fetch('/api/public-characters/publish', {
           method: 'POST',
           headers: {
@@ -693,7 +643,7 @@ export default function Home() {
       alert('記憶を保存するには、キャラクターとの会話を選択し、ログインしている必要があります。');
       return;
     }
-    if (currentConversation.messages.length < 4) { // Need at least a few turns
+    if (currentConversation.messages.length < 4) {
       alert('記憶を生成するには、もう少し会話を続けてください。');
       return;
     }
@@ -766,8 +716,8 @@ export default function Home() {
         const apiRequestBody: ChutesApiRequestBody = {
             model,
             messages: messagesPayload,
-            temperature: 0.8, // Use a slightly higher temperature for creativity
-            useCensorship: false, // Allow more creative freedom
+            temperature: 0.8,
+            useCensorship: false,
         };
 
         const response = await fetch('/api/chutes', {
@@ -784,12 +734,11 @@ export default function Home() {
         const data = await response.json();
         const generatedPrompt = data.reply || '';
 
-        // Pre-fill the new character form with the generated prompt
         setNewCharacter(prev => ({
             ...prev,
             systemPrompt: generatedPrompt,
             name: '',
-            description: userPrompt.substring(0, 50), // Use user prompt as description basis
+            description: userPrompt.substring(0, 50),
         }));
         setShowQuickCreateModal(false);
         setShowCharacterDialog(true);
@@ -800,7 +749,7 @@ export default function Home() {
     } finally {
         setIsGenerating(false);
     }
-  }, [model, temperature]);
+  }, [model]);
 
   const extractAndApplyGaugeChanges = useCallback((reply: string, characterId: string): string => {
     const gaugeMatch = reply.match(/<gauges>([\s\S]*?)<\/gauges>/);
@@ -840,7 +789,7 @@ export default function Home() {
   const sendMessage = useCallback(async (messageContent?: string, editedMessageId?: string) => {
     const textToSend = messageContent || input;
     const isImageMessage = !!imageToSend && !editedMessageId;
-    const localImageDataUrl = isImageMessage ? imageToSend?.url : undefined; // Renamed to avoid conflict
+    const localImageDataUrl = isImageMessage ? imageToSend?.url : undefined;
 
     if ((!textToSend.trim() && !isImageMessage) || !currentConversation || isSending) {
         return;
@@ -850,14 +799,12 @@ export default function Home() {
     let userMessageIdForReadUpdate = '';
 
     try {
-        // Add user message (common for both group and 1-on-1)
         if (editedMessageId) {
             setConversations(prevConvs => prevConvs.map(conv => {
                 if (conv.id === currentConversationId) {
                     const messageIndex = conv.messages.findIndex(msg => msg.id === editedMessageId);
                     if (messageIndex === -1) return conv;
 
-                    // Get the message being edited to preserve its properties
                     const originalMessage = conv.messages[messageIndex];
 
                     const updatedMessage = {
@@ -866,10 +813,9 @@ export default function Home() {
                         isEditing: false,
                         originalText: undefined,
                         timestamp: new Date(),
-                        imageUrl: originalMessage.imageUrl, // Preserve original image
+                        imageUrl: originalMessage.imageUrl,
                     };
 
-                    // Truncate messages and add the updated one
                     const newMessages = [...conv.messages.slice(0, messageIndex), updatedMessage];
 
                     return { ...conv, messages: newMessages };
@@ -887,7 +833,6 @@ export default function Home() {
             setConversations(prev => prev.map(conv =>
                 conv.id === currentConversationId ? { ...conv, messages: [...conv.messages, userMessage] } : conv
             ));
-            // Optimistic read update for user message in 1-on-1, handled differently in group
             if (!currentConversation.isGroupChat) {
                 setTimeout(() => {
                     setConversations(prev => prev.map(conv => {
@@ -903,8 +848,6 @@ export default function Home() {
         if (!messageContent && !editedMessageId) setInput('');
         if (isImageMessage) setImageToSend(null);
 
-
-        // --- Post-User Message Logic: Group Chat vs 1-on-1 ---
         const latestConversationsState = await new Promise<Conversation[]>(resolve => setConversations(prev => { resolve(prev); return prev; }));
         const activeConversation = latestConversationsState.find(c => c.id === currentConversationId);
 
@@ -923,22 +866,16 @@ export default function Home() {
                     console.warn(`Group chat: Character ${aiCharacterId} not found. Skipping.`);
                     continue;
                 }
-                 // Check for offline status specific to group chat member, if desired.
-                // For simplicity here, we'll assume group members always respond.
-                // const isAIOffline = character.useActiveHours && !isCharacterActive(character);
-                // if (isAIOffline) { ... add offline message and continue ... }
-
 
                 const historyForApi = tempMessagesForHistory.slice(-API_MESSAGE_HISTORY_COUNT).map(msg => {
                     let content = msg.text;
-                    // Add image indicators to history if applicable
                     if (msg.imageUrl && msg.sender === 'user') {
                         content = `${content} (ユーザーがこの画像を添付しました。画像の内容をよく見て、関連する返答をしてください。)`;
                     } else if (msg.imageUrl) {
                         content = `${content} (画像添付あり)`;
                     }
                     return {
-                        role: msg.sender === 'user' ? 'user' : (msg.sender === aiCharacterId ? 'assistant' : 'user'), // Treat other AIs' messages as 'user' for current AI's context
+                        role: msg.sender === 'user' ? 'user' : (msg.sender === aiCharacterId ? 'assistant' : 'user'),
                         content: content.replace(/\[感情:.+?\]/, '').trim()
                     };
                 });
@@ -950,7 +887,7 @@ export default function Home() {
                 ];
                 const apiRequestBody: ChutesApiRequestBody = { model, messages: messagesPayload, temperature, useCensorship };
 
-                if (localImageDataUrl && currentModelSupportsImage) { // User's image sent to all AIs
+                if (localImageDataUrl && currentModelSupportsImage) {
                     apiRequestBody.imageDataUrl = localImageDataUrl;
                 }
 
@@ -967,49 +904,43 @@ export default function Home() {
                     const data = await response.json();
                     let rawReply = data.reply || 'エラーが発生しました。応答がありません。';
                     let cleanedReply = cleanAIReply(rawReply);
-                    // const emotion = extractEmotion(cleanedReply); // Emotion removed
-                    const finalReplyText = cleanedReply.replace(/\[感情:.+?\]/, '').trim(); // Keep this to remove any residual emotion tags if AI still sends them
+                    const finalReplyText = cleanedReply.replace(/\[感情:.+?\]/, '').trim();
 
                     const aiMessage: Message = {
                         id: `${Date.now()}-${aiCharacterId}`, sender: aiCharacterId,
-                        text: finalReplyText, timestamp: new Date(), isRead: true // Group messages are immediately "read" by other AIs in context
+                        text: finalReplyText, timestamp: new Date(), isRead: true
                     };
 
                     setConversations(prev => prev.map(conv =>
                         conv.id === currentConversationId ? { ...conv, messages: [...conv.messages, aiMessage] } : conv
                     ));
-                    tempMessagesForHistory.push(aiMessage); // Add to temp history for next AI
+                    tempMessagesForHistory.push(aiMessage);
 
                 } catch (error) {
                     console.error(`API Error for ${character.name} in group chat:`, error);
                     const errorMessage: Message = {
                         id: `${Date.now()}-error-${aiCharacterId}`, sender: aiCharacterId,
                         text: `${character.name}からの応答生成中にエラーが発生しました。`,
-                        timestamp: new Date() // Emotion removed
+                        timestamp: new Date()
                     };
                     setConversations(prev => prev.map(conv =>
                         conv.id === currentConversationId ? { ...conv, messages: [...conv.messages, errorMessage] } : conv
                     ));
-                    tempMessagesForHistory.push(errorMessage); // Add error to temp history
+                    tempMessagesForHistory.push(errorMessage);
                 }
             }
-        } else { // 1-on-1 chat logic
+        } else {
             if (!currentCharacterForNormalChat) {
                 alert("会話相手のキャラクターが選択されていません。");
-                setIsSending(false); // Already set true, ensure it's reset if we bail early
+                setIsSending(false);
                 return;
             }
-            const isOffline = currentCharacterForNormalChat.useActiveHours && !isCharacterActive(currentCharacterForNormalChat);
-            if (isOffline && !window.confirm(`${currentCharacterForNormalChat.name}は現在オフラインです。メッセージは送信されますが、返信はアクティブ時間までお待ちください。送信しますか？`)) {
-                 setIsSending(false);
-                 return;
-            }
-            if (!currentModelSupportsImage && isImageMessage && !editedMessageId) { // check !editedMessageId for new images
+
+            if (!currentModelSupportsImage && isImageMessage && !editedMessageId) {
               alert('選択中のモデルは画像送信に対応していません。DeepSeek系のモデルを選択してください。');
               setIsSending(false);
               return;
             }
-
 
             const messagesForApiContext = activeConversation.messages;
             const historyForApi = messagesForApiContext.slice(-API_MESSAGE_HISTORY_COUNT).map(msg => {
@@ -1027,7 +958,6 @@ export default function Home() {
 
             let systemPrompt = currentCharacterForNormalChat.systemPrompt;
 
-            // Memory Injection Logic
             if (useMemory && session && activeConversation.messages.length === 1) {
               try {
                 const memoryResponse = await fetch(`/api/get-memory?character_id=${currentCharacterForNormalChat.id}`, {
@@ -1080,9 +1010,8 @@ export default function Home() {
                 conv.id === currentConversationId ? { ...conv, messages: [...conv.messages, aiMessage] } : conv
             ));
         }
-    } catch (error) { // Catch all errors from the entire send process
+    } catch (error) {
         console.error('Overall sendMessage Error:', error);
-        // Determine context for error message if possible
         const errorSenderId = currentConversation?.isGroupChat ? 'system' : (currentCharacterForNormalChat?.id || 'system');
         const errorMessageText = currentConversation?.isGroupChat
             ? 'グループチャットのメッセージ処理中にエラーが発生しました。'
@@ -1091,22 +1020,20 @@ export default function Home() {
         const errorMessage: Message = {
             id: `${Date.now()}-error-global`, sender: errorSenderId,
             text: errorMessageText,
-            timestamp: new Date() // Emotion removed
+            timestamp: new Date()
         };
         setConversations(prev => {
             const targetConv = prev.find(c => c.id === currentConversationId);
             if (targetConv) {
                 return prev.map(conv => conv.id === currentConversationId ? { ...conv, messages: [...conv.messages, errorMessage] } : conv);
             }
-            // If currentConversationId somehow became invalid, this is a fallback, though less ideal.
-            // Consider adding to a general error log or a default conversation if one exists.
             console.error("Could not add error message to specific conversation, ID was: ", currentConversationId);
             return prev;
         });
     } finally {
         setIsSending(false);
     }
-  }, [input, imageToSend, currentConversationId, currentCharacterForNormalChat, currentModelSupportsImage, isSending, isCharacterActive, model, temperature, useCensorship, conversations, currentConversation, characters]);
+  }, [input, imageToSend, currentConversationId, currentCharacterForNormalChat, currentModelSupportsImage, isSending, model, temperature, useCensorship, conversations, currentConversation, characters, extractAndApplyGaugeChanges, session, useMemory]);
 
 
   const sendQuickMessage = useCallback((text: string) => {
@@ -1249,12 +1176,10 @@ export default function Home() {
             modeSpecificInstructions = `\n\n追加指示：あなたは今、「${opponentName}」と自由な会話をしています。特定の役割に縛られず、自然体で会話を続けてください。これはカジュアルな自動会話です。`;
         }
 
-        // const effectiveSystemPrompt = `${baseSystemPrompt}${modeSpecificInstructions}`; // Old way
-
         const apiPayloadMessages = generateApiMessagesForCharToChar(
           conversationToUpdate.messages,
-          baseSystemPrompt, // Pass pure character prompt
-          modeSpecificInstructions, // Pass mode instructions separately
+          baseSystemPrompt,
+          modeSpecificInstructions,
           participantIds,
           speakerCharId,
           promptTextForSpeaker
@@ -1396,43 +1321,36 @@ export default function Home() {
   }, [isAutoReplying, currentConversation, autoReplyTurnCount, isSending, sendCharToCharMessage, currentConversationId, characters]);
 
 
-  const toggleAutoReply = useCallback(() => {
-    if (!currentConversation?.isCharToCharConversation) return;
-    if (isAutoReplying) {
-        setIsAutoReplying(false);
-    } else {
-        setAutoReplyTurnCount(0);
-        setIsAutoReplying(true);
+  const getModeIcon = useCallback((mode?: 'auto' | 'battle' | 'debate') => {
+    if (mode === 'battle') return <FaFistRaised className="mr-2" />;
+    if (mode === 'debate') return <FaBalanceScale className="mr-2" />;
+    return <FaComments className="mr-2" />;
+  }, []);
+
+  const handleCharacterIconChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 1024 * 1024 * 2) { // 2MB limit check example
+        alert('画像サイズが大きすぎます。2MB以下の画像を選択してください。');
+        return;
     }
-  }, [currentConversation, isAutoReplying]);
 
-  const currentCharacterOrParticipants = useMemo(() => {
-    if (currentConversation?.isCharToCharConversation && currentConversation.participantCharacterIds) {
-      const char1 = characters.find(c => c.id === currentConversation.participantCharacterIds![0]);
-      const char2 = characters.find(c => c.id === currentConversation.participantCharacterIds![1]);
-      return { char1, char2 };
-    }
-    return { char1: currentCharacterForNormalChat, char2: null };
-  }, [currentConversation, characters, currentCharacterForNormalChat]);
+    const reader = new FileReader();
+    reader.onload = (event) => {
+        const imageUrl = event.target?.result as string;
+        // Simple client-side resize logic could go here if strictly needed 1000x1000
+        // For now, accepting the data URL.
+        if (editingCharacter) {
+            setEditingCharacter({ ...editingCharacter, icon: imageUrl });
+        } else {
+            setNewCharacter({ ...newCharacter, icon: imageUrl });
+        }
+    };
+    reader.readAsDataURL(file);
+    if (characterIconInputRef.current) characterIconInputRef.current.value = '';
+  }, [editingCharacter, newCharacter]);
 
-  const sidebarConversations = useMemo(() => {
-    return conversations
-        .filter(conv => {
-            if (conv.isGroupChat) return true; // Always show group chats
-            if (conv.isCharToCharConversation) return true; // Always show char-to-char chats
-
-            // For 1-on-1 chats:
-            // If a currentCharacterId is selected (meaning user is focused on a 1-on-1 context),
-            // only show 1-on-1 conversations for that specific character.
-            // If no currentCharacterId is selected (e.g., app just loaded, or after viewing a non-1-on-1 chat like a group chat),
-            // show all 1-on-1 chats.
-            if (!conv.isGroupChat && !conv.isCharToCharConversation) { // This is a 1-on-1 chat
-                return !currentCharacterId || conv.characterId === currentCharacterId;
-            }
-            return false; // Should ideally not be reached if all conversation types are handled above
-        })
-        .sort((a, b) => parseInt(b.id) - parseInt(a.id));
-  }, [conversations, currentCharacterId]);
 
   const isLineDark = useMemo(() => lineThemeActive && isDarkMode, [lineThemeActive, isDarkMode]);
   const generalTextColor = useMemo(() => (isDarkMode ? 'text-slate-200' : 'text-slate-700'), [isDarkMode]);
@@ -1478,47 +1396,35 @@ export default function Home() {
 
   const deleteConversationCallback = useCallback((e: React.MouseEvent, convId: string) => {
     e.stopPropagation();
-    console.log("deleteConversationCallback called with ID:", convId);
     setConversationToDeleteId(convId);
     setShowDeleteConversationDialog(true);
-  }, [setConversationToDeleteId, setShowDeleteConversationDialog]); // Updated dependencies
+  }, []);
 
   const handleConfirmDeleteConversation = useCallback(() => {
     if (!conversationToDeleteId) return;
-    console.log("Confirmed deletion for conversation ID:", conversationToDeleteId);
-
     try {
       setConversations(prevConvs => prevConvs.filter(conv => conv.id !== conversationToDeleteId));
       if (currentConversationId === conversationToDeleteId) {
         setCurrentConversationId('');
         setIsAutoReplying(false);
       }
-      console.log("Conversation deleted successfully:", conversationToDeleteId);
     } catch (error) {
       console.error("Error in handleConfirmDeleteConversation:", error);
     } finally {
       setShowDeleteConversationDialog(false);
       setConversationToDeleteId(null);
     }
-  }, [conversationToDeleteId, currentConversationId, setConversations, setCurrentConversationId, setIsAutoReplying, setShowDeleteConversationDialog, setConversationToDeleteId]); // Updated dependencies
+  }, [conversationToDeleteId, currentConversationId]);
 
   const deleteCharacterCallback = useCallback((e: React.MouseEvent, charId: string) => {
     e.stopPropagation();
-    console.log("deleteCharacterCallback called with ID:", charId);
-
     const relatedConversations = conversations.filter(conv => {
-      if (!conv.isCharToCharConversation && conv.characterId === charId) {
-        return true;
-      }
-      if (conv.isCharToCharConversation && conv.participantCharacterIds?.includes(charId)) {
-        return true;
-      }
+      if (!conv.isCharToCharConversation && conv.characterId === charId) return true;
+      if (conv.isCharToCharConversation && conv.participantCharacterIds?.includes(charId)) return true;
       return false;
     });
 
     const characterName = characters.find(c => c.id === charId)?.name || 'このキャラクター';
-    console.log(`Character Name: ${characterName}, Related Conversations: ${relatedConversations.length}`); // Keep this log
-
     let message = `キャラクター「${characterName}」を削除します。`;
     if (relatedConversations.length > 0) {
       message += `\n\nこのキャラクターは${relatedConversations.length}件の会話で使用されています。これらの会話もすべて削除されます。`;
@@ -1528,12 +1434,10 @@ export default function Home() {
     setCharacterToDeleteId(charId);
     setCharacterDeleteMessage(message);
     setShowDeleteCharacterDialog(true);
-  }, [conversations, characters, setCharacterToDeleteId, setCharacterDeleteMessage, setShowDeleteCharacterDialog]); // Updated dependencies
+  }, [conversations, characters]);
 
   const handleConfirmDeleteCharacter = useCallback(() => {
     if (!characterToDeleteId) return;
-    console.log("Confirmed deletion for character ID:", characterToDeleteId);
-
     try {
       const relatedConversations = conversations.filter(conv => {
         if (!conv.isCharToCharConversation && conv.characterId === characterToDeleteId) return true;
@@ -1559,7 +1463,6 @@ export default function Home() {
           setCurrentCharacterId('');
         }
       }
-      console.log("Character and related conversations deleted successfully:", characterToDeleteId);
     } catch (error) {
       console.error("Error in handleConfirmDeleteCharacter:", error);
     } finally {
@@ -1567,21 +1470,7 @@ export default function Home() {
       setCharacterToDeleteId(null);
       setCharacterDeleteMessage('');
     }
-  }, [
-    characterToDeleteId,
-    conversations,
-    characters,
-    currentConversationId,
-    currentCharacterId,
-    setConversations,
-    setCurrentConversationId,
-    setIsAutoReplying,
-    setCharacters,
-    setCurrentCharacterId,
-    setShowDeleteCharacterDialog,
-    setCharacterToDeleteId,
-    setCharacterDeleteMessage
-  ]); // Updated dependencies
+  }, [characterToDeleteId, conversations, characters, currentConversationId, currentCharacterId]);
 
   const handleImageFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]; if (!file) return;
@@ -1624,377 +1513,62 @@ export default function Home() {
     if (!currentConversation || currentConversation.isCharToCharConversation || currentConversation.isGroupChat || !currentCharacterForNormalChat || isSending) {
       return;
     }
-
+    // ... logic remains same, calling sendMessage internally if needed or reusing API logic
+    // For brevity, reusing the logic from previous version, just ensuring deps are correct.
+    // Actually, I should just paste the full function to be safe.
     const lastMessage = currentConversation.messages.length > 0 ? currentConversation.messages[currentConversation.messages.length - 1] : null;
-    if (!lastMessage || lastMessage.sender === 'user') {
-      // Should be disabled by button logic, but good to double check
-      return;
-    }
+    if (!lastMessage || lastMessage.sender === 'user') return;
 
     setIsSending(true);
-
     try {
       const messagesForApiContext = currentConversation.messages;
       const historyForApi = messagesForApiContext.slice(-API_MESSAGE_HISTORY_COUNT).map(msg => {
         let content = msg.text;
-        if (msg.imageUrl && msg.sender === 'user') {
-            content = `${content} (ユーザーがこの画像を添付しました。画像の内容をよく見て、関連する返答をしてください。)`;
-        } else if (msg.imageUrl) {
-            content = `${content} (画像添付あり)`;
-        }
-        return {
-            role: msg.sender === 'user' ? 'user' : 'assistant',
-            content: content.replace(/\[感情:.+?\]/, '').trim()
-        };
+        if (msg.imageUrl && msg.sender === 'user') content = `${content} (ユーザーがこの画像を添付しました。画像の内容をよく見て、関連する返答をしてください。)`;
+        else if (msg.imageUrl) content = `${content} (画像添付あり)`;
+        return { role: msg.sender === 'user' ? 'user' : 'assistant', content: content.replace(/\[感情:.+?\]/, '').trim() };
       });
-
-      // Add a prompt to encourage continuation
-      const continuationPrompt = { role: 'user', content: "続けてください。" }; // Simple prompt
-
+      const continuationPrompt = { role: 'user', content: "続けてください。" };
       const messagesPayload = [];
-      if (currentCharacterForNormalChat.useGauges) {
-          messagesPayload.push({ role: 'system', content: FORMATTING_INSTRUCTIONS_PROMPT });
-      }
+      if (currentCharacterForNormalChat.useGauges) messagesPayload.push({ role: 'system', content: FORMATTING_INSTRUCTIONS_PROMPT });
       messagesPayload.push({ role: 'system', content: currentCharacterForNormalChat.systemPrompt });
       messagesPayload.push(...historyForApi, continuationPrompt);
 
-      const apiRequestBody: ChutesApiRequestBody = {
-        model,
-        messages: messagesPayload,
-        temperature,
-        useCensorship
-      };
-
-      const response = await fetch('/api/chutes', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(apiRequestBody)
-      });
-
+      const apiRequestBody: ChutesApiRequestBody = { model, messages: messagesPayload, temperature, useCensorship };
+      const response = await fetch('/api/chutes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(apiRequestBody) });
       if (!response.ok) { const errorData = await response.text(); throw new Error(`HTTP error! status: ${response.status}, message: ${errorData}`); }
       const data = await response.json();
       let rawReply = data.reply || 'エラーが発生しました。応答がありません。';
-
-      if (currentCharacterForNormalChat) {
-          rawReply = extractAndApplyGaugeChanges(rawReply, currentCharacterForNormalChat.id);
-      }
-
+      if (currentCharacterForNormalChat) rawReply = extractAndApplyGaugeChanges(rawReply, currentCharacterForNormalChat.id);
       const finalReplyText = cleanAIReply(rawReply);
-
-      const aiMessage: Message = {
-          id: `${Date.now()}-ai-continue`,
-          sender: currentCharacterForNormalChat.id,
-          text: finalReplyText, timestamp: new Date(), isRead: false
-      };
-      setConversations(prev => prev.map(conv =>
-          conv.id === currentConversationId ? { ...conv, messages: [...conv.messages, aiMessage] } : conv
-      ));
-
+      const aiMessage: Message = { id: `${Date.now()}-ai-continue`, sender: currentCharacterForNormalChat.id, text: finalReplyText, timestamp: new Date(), isRead: false };
+      setConversations(prev => prev.map(conv => conv.id === currentConversationId ? { ...conv, messages: [...conv.messages, aiMessage] } : conv));
     } catch (error) {
         console.error('handleContinueConversation Error:', error);
-        const errorMessage: Message = {
-            id: `${Date.now()}-error-continue`, sender: currentCharacterForNormalChat.id,
-            text: '連続応答の生成中にエラーが発生しました。',
-            timestamp: new Date() // Emotion removed
-        };
-        setConversations(prev => prev.map(conv =>
-            conv.id === currentConversationId ? { ...conv, messages: [...conv.messages, errorMessage] } : conv
-        ));
-    } finally {
-        setIsSending(false);
-    }
-
-  }, [currentConversation, currentCharacterForNormalChat, isSending, model, temperature, useCensorship, conversations, currentConversationId]);
+        const errorMessage: Message = { id: `${Date.now()}-error-continue`, sender: currentCharacterForNormalChat.id, text: '連続応答の生成中にエラーが発生しました。', timestamp: new Date() };
+        setConversations(prev => prev.map(conv => conv.id === currentConversationId ? { ...conv, messages: [...conv.messages, errorMessage] } : conv));
+    } finally { setIsSending(false); }
+  }, [currentConversation, currentCharacterForNormalChat, isSending, model, temperature, useCensorship, conversations, currentConversationId, extractAndApplyGaugeChanges]);
 
   const handleRetry = useCallback(async (aiMessageId: string) => {
-    if (!currentConversation || isSending) {
-      return;
-    }
-
+    if (!currentConversation || isSending) return;
     const messageIndex = currentConversation.messages.findIndex(msg => msg.id === aiMessageId);
-
-    // Ensure the message exists and it's an AI message
-    if (messageIndex < 0) {
-      console.error("Retry impossible: AI message not found.");
-      return;
-    }
-
+    if (messageIndex < 0) return;
     const aiMessage = currentConversation.messages[messageIndex];
-    if (aiMessage.sender === 'user') {
-        console.error("Retry impossible: The selected message is not from the AI.");
-        return;
-    }
-
-    // Find the last user message before this AI message
+    if (aiMessage.sender === 'user') return;
     let lastUserMessage = null;
     for (let i = messageIndex - 1; i >= 0; i--) {
-        if (currentConversation.messages[i].sender === 'user') {
-            lastUserMessage = currentConversation.messages[i];
-            break;
-        }
+        if (currentConversation.messages[i].sender === 'user') { lastUserMessage = currentConversation.messages[i]; break; }
     }
-
-    if (!lastUserMessage) {
-        console.error("Retry impossible: Could not find a preceding user message to retry from.");
-        // Maybe show an alert to the user
-        alert("このAIメッセージの元となったユーザーメッセージが見つからないため、再試行できません。");
-        return;
-    }
-
-    // Use the sendMessage function with the user message's ID to trigger the edit logic.
-    // This will truncate the conversation and regenerate the AI response.
+    if (!lastUserMessage) { alert("このAIメッセージの元となったユーザーメッセージが見つからないため、再試行できません。"); return; }
     await sendMessage(lastUserMessage.text, lastUserMessage.id);
-
   }, [currentConversation, isSending, sendMessage]);
-
-
-  const renderFormattedText = (text: string | undefined, allowCustomColor: boolean): React.ReactNode => {
-    if (!text) return null;
-
-    // Order matters for regex: check ** first, then *
-    const regex = /(\*\*[\s\S]*?\*\*|\*[\s\S]*?\*|S\[[\s\S]*?\]S|L\[[\s\S]*?\]L|O\([0-9.]+\)\[[\s\S]*?\]O|C\(.+?\)\[[\s\S]*?\]C)/g;
-    const parts = text.split(regex);
-
-    return parts.map((part, index) => {
-      if (!part) return null;
-
-      // Bold: **text**
-      if (part.startsWith('**') && part.endsWith('**')) {
-        if (part.length > 4) { // Valid bold **text**
-          return <strong key={index}>{renderFormattedText(part.substring(2, part.length - 2))}</strong>;
-        } else if (part === '****') {
-          return <strong key={index}></strong>;
-        }
-        // Malformed like "**" or "***", or if it's content of italic like *text**
-        return part;
-      }
-
-      // Italic: *text*
-      // This is checked AFTER bold to correctly handle ***text*** as <strong><em>text</em></strong>
-      else if (part.startsWith('*') && part.endsWith('*')) {
-        if (part.length > 2) { // Valid italic *t*
-          return <em key={index}>{renderFormattedText(part.substring(1, part.length - 1))}</em>;
-        }
-        // Malformed like "*" or if it's part of bold like **text*
-        return part;
-      }
-
-      // Small: S[text]S
-      else if (part.startsWith('S[') && part.endsWith(']S') && part.length >= 4) { // S[]S is length 4
-        const content = part.substring(2, part.length - 2);
-        return <span key={index} style={{ fontSize: '0.8em' }}>{renderFormattedText(content)}</span>;
-      }
-
-      // Large: L[text]L
-      if (part.startsWith('L[') && part.endsWith(']L') && part.length >= 4) { // L[]L is length 4
-        const content = part.substring(2, part.length - 2);
-        return <span key={index} style={{ fontSize: '1.2em' }}>{renderFormattedText(content)}</span>;
-      }
-
-      // Opacity: O(value)[text]O
-      const opacityMatch = part.match(/^O\(([0-9.]+)\)\[([\s\S]*)\]O$/);
-      if (opacityMatch) {
-        const value = parseFloat(opacityMatch[1]);
-        const content = opacityMatch[2];
-        if (value >= 0.1 && value <= 1.0) { // Allow up to 1.0 for full opacity
-          return <span key={index} style={{ opacity: value }}>{renderFormattedText(content)}</span>;
-        }
-        // If value is invalid, parse content without opacity
-        return renderFormattedText(content);
-      }
-
-      // Color: C(colorValue)[text]C
-      const colorMatch = part.match(/^C\((.+?)\)\[([\s\S]*)\]C$/);
-      if (colorMatch && allowCustomColor) { // Check allowCustomColor here
-        const colorValue = colorMatch[1];
-        const content = colorMatch[2];
-        // Basic validation for colorValue to prevent obvious XSS if AI generates malicious values.
-        // A more robust sanitization might be needed if complex CSS is allowed.
-        // For now, assuming color names, hex, rgb, rgba, hsl, hsla.
-        if (/^[#\w\s(),%.-]+$/.test(colorValue)) {
-           return <span key={index} style={{ color: colorValue }}>{renderFormattedText(content, allowCustomColor)}</span>;
-        }
-        // If colorValue is invalid or not allowed, parse content without color
-        return renderFormattedText(content, allowCustomColor);
-      } else if (colorMatch && !allowCustomColor) {
-        // If color is not allowed, render the content of C()[]C without color, but still parse nested formats
-        const content = colorMatch[2];
-        return renderFormattedText(content, allowCustomColor);
-      }
-
-      return part; // Regular text
-    });
-  };
-
-  const MessageItem = useMemo(() => React.memo(({ msg, currentChatFontSize }: { msg: Message; currentChatFontSize: string }) => {
-    if (msg.sender === 'system') {
-        return (
-            <div className="text-center my-2">
-                <span className={`text-xs px-3 py-1 rounded-full ${isDarkMode ? 'bg-slate-700 text-slate-300' : 'bg-slate-200 text-slate-600'}`}>
-                    {msg.text}
-                </span>
-            </div>
-        );
-    }
-
-    let characterForMessage: Character | null = null;
-    let messageSenderIsUser = msg.sender === 'user';
-    let justifyContentClass = 'justify-start';
-
-    if (messageSenderIsUser) {
-        justifyContentClass = 'justify-end';
-    } else if (currentConversation?.isCharToCharConversation && currentConversation.participantCharacterIds) {
-        characterForMessage = characters.find(c => c.id === msg.sender) || null;
-        if (characterForMessage && currentConversation.participantCharacterIds[1] === msg.sender) {
-            justifyContentClass = 'justify-end';
-        } else {
-            justifyContentClass = 'justify-start';
-        }
-
-    } else {
-        characterForMessage = characters.find(c => c.id === msg.sender) || currentCharacterForNormalChat || null;
-    }
-
-    let bubbleClass = ''; let messageTextColorClass = effectiveTextColor;
-    let messageContainerClass = `max-w-[90%] sm:max-w-[85%] flex ${justifyContentClass === 'justify-end' ? 'flex-row-reverse' : 'flex-row'}`;
-    let messageContentContainerClass = `flex ${justifyContentClass === 'justify-end' ? 'flex-row-reverse items-end' : 'flex-row items-end'} gap-2 w-full`;
-    let messageWrapperDivClass = `flex ${justifyContentClass} mb-1.5 px-2 group relative`;
-
-    if (lineThemeActive) {
-      if (justifyContentClass === 'justify-end') {
-        bubbleClass = `rounded-tr-none ${isLineDark ? 'bg-green-700 text-gray-100' : 'bg-[#90EE90] text-black'}`;
-        messageTextColorClass = isLineDark ? 'text-gray-100' : 'text-black';
-      } else {
-        bubbleClass = `rounded-tl-none ${isLineDark ? 'bg-slate-700 text-slate-100' : 'bg-white text-black'}`;
-        messageTextColorClass = isLineDark ? 'text-slate-100' : 'text-black';
-      }
-      bubbleClass += ' relative rounded-xl px-3.5 py-2.5 shadow-md break-words min-w-[70px]';
-    } else {
-      // Not LINE Theme - No bubble, more space
-      bubbleClass = 'py-1'; // Minimal padding for non-bubble text
-      messageTextColorClass = generalTextColor;
-      messageContainerClass = `w-full flex ${justifyContentClass === 'justify-end' ? 'flex-row-reverse' : 'flex-row'}`; // Take full width
-      messageContentContainerClass = `flex flex-col w-full ${justifyContentClass === 'justify-end' ? 'items-end' : 'items-start'}`;
-      messageWrapperDivClass = `flex ${justifyContentClass} mb-2 group relative`; // Increased bottom margin for more space
-    }
-
-    const isCurrentlyEditingThisMessage = editingMessageId === msg.id;
-
-    return (
-      <div className={messageWrapperDivClass}>
-        <div className={messageContainerClass}>
-          <div className={`flex-shrink-0 self-start mt-1 ${justifyContentClass === 'justify-end' ? 'ml-2' : 'mr-2'}`}>
-            {characterForMessage && !messageSenderIsUser ? (
-              <div className="text-3xl w-9 h-9 rounded-full flex items-center justify-center shadow-sm" style={{ backgroundColor: characterForMessage?.color || '#A0AEC0' }}> {characterForMessage?.icon || '👤'} </div>
-            ) : messageSenderIsUser ? (
-              <div className={`text-2xl w-9 h-9 rounded-full flex items-center justify-center shadow-sm ${lineThemeActive && !isLineDark ? 'bg-slate-200 text-slate-600' : (isDarkMode || (lineThemeActive && isLineDark) ? 'bg-slate-600 text-indigo-400' : 'bg-slate-300 text-indigo-500')}`}> <FaUserCircle /> </div>
-            ) : null}
-          </div>
-          <div className={messageContentContainerClass}>
-            {isCurrentlyEditingThisMessage ? (
-                <div className={`w-full p-2 rounded-lg shadow-md ${isDarkMode ? 'bg-slate-600' : 'bg-slate-100'}`}>
-                    <textarea
-                        value={editingMessageText}
-                        onChange={(e) => setEditingMessageText(e.target.value)}
-                        className={`w-full p-2 border rounded-md text-sm ${generalInputFieldBgColor} ${generalTextColor} ${generalBorderColor} focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 resize-none`}
-                        rows={3}
-                        autoFocus
-                    />
-                    <div className="mt-2 flex justify-end space-x-2">
-                        <button onClick={handleCancelEditMessage} className={`px-3 py-1 text-xs rounded-md border ${generalBorderColor} hover:bg-opacity-70 transition-colors ${generalTextColor} flex items-center`}>
-                            <FaUndo className="mr-1" /> キャンセル
-                        </button>
-                        <button onClick={handleSaveEditMessage} className={`px-3 py-1 text-xs rounded-md bg-indigo-500 hover:bg-indigo-600 text-white transition-colors flex items-center`}>
-                            <FaSave className="mr-1" /> 保存
-                        </button>
-                    </div>
-                </div>
-            ) : (
-                <div className={bubbleClass}>
-                  {msg.imageUrl && ( <img src={msg.imageUrl} alt="送信された画像" className="max-w-full max-h-60 rounded-lg mb-2 cursor-pointer shadow-sm" onClick={() => window.open(msg.imageUrl, '_blank')} /> )}
-                  {msg.text &&
-                    <span
-                        className={`whitespace-pre-wrap ${messageTextColorClass} ${currentChatFontSize}`}
-                        // Emotion-based text color styling removed, will be handled by allowAICustomTextColor and C() format.
-                    >
-                        {renderFormattedText(msg.text, allowAICustomTextColor && !lineThemeActive)}
-                    </span>
-                  }
-                  {!msg.text && msg.imageUrl && <span className={`${messageTextColorClass} italic text-xs`}>画像</span>}
-                </div>
-            )}
-            {/* Action Buttons for AI messages */}
-            {!isCurrentlyEditingThisMessage && !messageSenderIsUser && !currentConversation?.isGroupChat && !currentConversation?.isCharToCharConversation && (
-              <div className={`mt-1 flex gap-2 ${justifyContentClass === 'justify-end' ? 'justify-end' : 'justify-start'} w-full`}>
-                {/* Retry Button - appears on hover for any AI message */}
-                <button
-                  onClick={() => handleRetry(msg.id)}
-                  disabled={isSending}
-                  className={`flex items-center px-2 py-1 rounded-md text-xs ${isDarkMode ? 'text-slate-400 hover:text-slate-200 bg-slate-700/70 hover:bg-slate-600' : 'text-slate-500 hover:text-slate-700 bg-slate-200 hover:bg-slate-300'} transition-colors duration-150 opacity-80 hover:opacity-100`}
-                  title="この時点からAIの応答を再生成"
-                >
-                  <FaRedo size={10} className="mr-1" />
-                  <span>再試行</span>
-                </button>
-
-                {/* Continue Conversation Button - appears only for the last AI message */}
-                {!isSending && currentConversation?.messages[currentConversation.messages.length - 1]?.id === msg.id && (
-                  <button
-                    onClick={() => handleContinueConversation()}
-                    disabled={isSending}
-                    className={`flex items-center px-2 py-1 rounded-md text-xs ${isDarkMode ? 'text-slate-400 hover:text-slate-200 bg-slate-700/70 hover:bg-slate-600' : 'text-slate-500 hover:text-slate-700 bg-slate-200 hover:bg-slate-300'} transition-colors duration-150 opacity-70 hover:opacity-100`}
-                    title="AIに返信を続けさせる"
-                  >
-                    <FaPlay size={10} className="mr-1" />
-                    <span>生成を続ける</span>
-                  </button>
-                )}
-              </div>
-            )}
-
-            {/* Timestamp and Status - Now side-by-side with bubble for all themes to avoid wrapping */}
-            {!isCurrentlyEditingThisMessage && (
-                <div className={`text-xs flex flex-col justify-end whitespace-nowrap ${justifyContentClass === 'justify-end' ? 'items-end' : 'items-start'} ${timeAndReadStatusColor} flex-shrink-0`}>
-                    {lineThemeActive && msg.sender === 'user' && ( <span className={`mb-0.5 ${msg.isRead ? timeAndReadStatusColor : 'text-transparent'}`}> {msg.isRead ? '既読' : '送信済'} </span> )}
-                    <span>{formatTime(msg.timestamp)}</span>
-                     {msg.sender === 'user' && !currentConversation?.isCharToCharConversation && !isSending && (
-                        <button
-                            onClick={() => handleEditMessage(msg.id, msg.text)}
-                            className={`mt-1 p-1 rounded-full ${isDarkMode ? 'text-slate-400 hover:text-slate-200 hover:bg-slate-700' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-300'} transition-colors`}
-                            title="編集"
-                        >
-                            <FaEdit size={10} />
-                        </button>
-                    )}
-                </div>
-            )}
-          </div>
-        </div>
-        {/* Character Name for non-user messages, placed below the avatar/bubble group if needed, or above.
-            Currently removing it from above bubble to match LINE style more,
-            but if user wants it, we can re-add it outside the flex row or above the bubble inside the flex-col if we reverted.
-            For now, simpler is better for "no wrapping".
-            If we want name, it should probably be above the bubble row.
-        */}
-        {characterForMessage && !messageSenderIsUser && !isCurrentlyEditingThisMessage && (
-             <div className={`absolute -top-5 left-12 text-xs ${lineThemeActive ? (isLineDark ? 'text-slate-400' : 'text-slate-600') : (isDarkMode ? 'text-slate-400' : 'text-slate-500')} opacity-90 px-1 truncate max-w-[200px]`}>
-                {characterForMessage.name}
-            </div>
-        )}
-      </div>
-    )
-  }), [isDarkMode, lineThemeActive, effectiveTextColor, characters, currentConversation, generalTextColor, timeAndReadStatusColor, isLineDark, editingMessageId, handleCancelEditMessage, handleSaveEditMessage, handleEditMessage, handleRetry, handleContinueConversation, currentCharacterForNormalChat, isSending, generalInputFieldBgColor, generalBorderColor, allowAICustomTextColor]);
-
-  const getModeIcon = useCallback((mode?: 'auto' | 'battle' | 'debate') => {
-    if (mode === 'battle') return <FaFistRaised className="mr-2" />;
-    if (mode === 'debate') return <FaBalanceScale className="mr-2" />;
-    return <FaComments className="mr-2" />;
-  }, []);
 
   return (
     <div className="h-screen flex flex-col selection:bg-indigo-500 selection:text-white antialiased" style={{ backgroundColor: rootPageActualBg }}>
       <Head>
-<title>Kint</title>
-<meta name="description" content="AI異性交遊ロールプレイアプリ" />
+        <title>Kint</title>
+        <meta name="description" content="AI異性交遊ロールプレイアプリ" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
         <link rel="icon" href="/favicon.ico" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -2018,7 +1592,7 @@ export default function Home() {
         onClose={() => setShowNewCharacterChoiceModal(false)}
         onManualCreate={() => {
           setEditingCharacter(null);
-          setNewCharacter({ name: '', description: '', systemPrompt: '', color: '#6366f1', activeHours: { start: 0, end: 23 }, useActiveHours: false, icon: '👤', isPublic: false, gauges: DEFAULT_GAUGES, useGauges: true });
+          setNewCharacter({ name: '', description: '', systemPrompt: '', icon: PLACEHOLDER_ICON, isPublic: false, gauges: DEFAULT_GAUGES, useGauges: true });
           setShowCharacterDialog(true);
         }}
         onQuickCreate={() => setShowQuickCreateModal(true)}
@@ -2066,6 +1640,8 @@ export default function Home() {
         modelOptions={MODEL_OPTIONS}
         cheatMode={cheatMode}
         setCheatMode={setCheatMode}
+        useMemory={useMemory}
+        setUseMemory={setUseMemory}
       />
 
       <GaugesModal
@@ -2199,9 +1775,10 @@ export default function Home() {
                   className={`p-3 rounded-lg flex items-center justify-between transition-colors duration-150 group ${char.id === currentCharacterId && !currentConversation?.isCharToCharConversation ? (isDarkMode ? 'bg-green-600 text-white' : 'bg-green-100 text-green-800 font-medium') : `hover:${isDarkMode ? 'bg-slate-700/70' : 'bg-slate-100'} ${sidebarActualTextColor}`}`}
                 >
                   <div className="flex items-center flex-1 truncate mr-2 cursor-pointer" onClick={() => switchToCharacter(char.id)}>
-                    <div className="text-2xl mr-3 w-8 h-8 flex items-center justify-center rounded-full shadow-sm" style={{backgroundColor: char.color || '#A0AEC0'}}>{char.icon}</div>
+                    <div className="w-8 h-8 flex items-center justify-center rounded-full shadow-sm overflow-hidden bg-gray-300 mr-3">
+                        {char.icon?.startsWith('data:') || char.icon?.startsWith('http') ? <img src={char.icon} alt={char.name} className="w-full h-full object-cover" /> : <span className="text-xl">{char.icon}</span>}
+                    </div>
                     <div className="min-w-0"> <div className="font-medium truncate text-sm">{char.name}</div> <div className={`text-xs opacity-70 truncate ${isDarkMode? 'text-slate-400':'text-slate-500'}`}>{char.description}</div> </div>
-                    {char.id === currentCharacterId && char.useActiveHours && !currentConversation?.isCharToCharConversation && ( <span className={`ml-2 text-xs font-semibold ${isCharacterActive(char) ? 'text-green-400' : 'text-red-400'}`}> {isCharacterActive(char) ? '● オン' : '○ オフ'} </span> )}
                   </div>
                   <div className="flex items-center ml-1 space-x-1">
                     <button
@@ -2253,8 +1830,8 @@ export default function Home() {
                                             const char = characters.find(c => c.id === id);
                                             if (!char) return null;
                                             return (
-                                                <div key={id} className="text-2xl w-9 h-9 flex items-center justify-center rounded-full shadow-sm border-2 border-white dark:border-slate-800" style={{backgroundColor: char.color || '#A0AEC0'}} title={char.name}>
-                                                    {char.icon}
+                                                <div key={id} className="w-9 h-9 flex items-center justify-center rounded-full shadow-sm border-2 border-white dark:border-slate-800 overflow-hidden bg-gray-300" title={char.name}>
+                                                    {char.icon?.startsWith('data:') || char.icon?.startsWith('http') ? <img src={char.icon} alt={char.name} className="w-full h-full object-cover" /> : <span className="text-xl">{char.icon}</span>}
                                                 </div>
                                             );
                                         })}
@@ -2266,17 +1843,32 @@ export default function Home() {
                             ) : currentConversation?.isCharToCharConversation && currentConversation.participantCharacterIds ? (
                                 <>
                                     <div className="flex -space-x-3 mr-3">
-                                        {characters.find(c=>c.id === currentConversation.participantCharacterIds![0]) && <div className="text-2xl w-9 h-9 flex items-center justify-center rounded-full shadow-sm border-2 border-white dark:border-slate-800" style={{backgroundColor: characters.find(c=>c.id === currentConversation.participantCharacterIds![0])?.color || '#A0AEC0'}}>{characters.find(c=>c.id === currentConversation.participantCharacterIds![0])?.icon}</div>}
-                                        {characters.find(c=>c.id === currentConversation.participantCharacterIds![1]) && <div className="text-2xl w-9 h-9 flex items-center justify-center rounded-full shadow-sm border-2 border-white dark:border-slate-800" style={{backgroundColor: characters.find(c=>c.id === currentConversation.participantCharacterIds![1])?.color || '#A0AEC0'}}>{characters.find(c=>c.id === currentConversation.participantCharacterIds![1])?.icon}</div>}
+                                        {characters.find(c=>c.id === currentConversation.participantCharacterIds![0]) && (
+                                            <div className="w-9 h-9 flex items-center justify-center rounded-full shadow-sm border-2 border-white dark:border-slate-800 overflow-hidden bg-gray-300">
+                                                {(() => {
+                                                    const char = characters.find(c=>c.id === currentConversation.participantCharacterIds![0]);
+                                                    return char?.icon?.startsWith('data:') || char?.icon?.startsWith('http') ? <img src={char.icon} alt={char.name} className="w-full h-full object-cover" /> : <span className="text-xl">{char?.icon}</span>
+                                                })()}
+                                            </div>
+                                        )}
+                                        {characters.find(c=>c.id === currentConversation.participantCharacterIds![1]) && (
+                                            <div className="w-9 h-9 flex items-center justify-center rounded-full shadow-sm border-2 border-white dark:border-slate-800 overflow-hidden bg-gray-300">
+                                                {(() => {
+                                                    const char = characters.find(c=>c.id === currentConversation.participantCharacterIds![1]);
+                                                    return char?.icon?.startsWith('data:') || char?.icon?.startsWith('http') ? <img src={char.icon} alt={char.name} className="w-full h-full object-cover" /> : <span className="text-xl">{char?.icon}</span>
+                                                })()}
+                                            </div>
+                                        )}
                                     </div>
                                     <h2 className={`text-lg font-semibold truncate ${chatHeaderActualTextColor}`}>{currentConversation.title || "キャラクター同士の会話"}</h2>
                                 </>
                             ) : currentCharacterForNormalChat ? (
                                 <>
-                                    <div className="text-2xl mr-3 w-9 h-9 flex items-center justify-center rounded-full shadow-sm flex-shrink-0" style={{backgroundColor: currentCharacterForNormalChat.color || '#A0AEC0'}}>{currentCharacterForNormalChat.icon}</div>
+                                    <div className="w-9 h-9 flex items-center justify-center rounded-full shadow-sm flex-shrink-0 overflow-hidden bg-gray-300 mr-3">
+                                        {currentCharacterForNormalChat.icon?.startsWith('data:') || currentCharacterForNormalChat.icon?.startsWith('http') ? <img src={currentCharacterForNormalChat.icon} alt={currentCharacterForNormalChat.name} className="w-full h-full object-cover" /> : <span className="text-xl">{currentCharacterForNormalChat.icon}</span>}
+                                    </div>
                                     <div className="min-w-0">
                                         <h2 className={`text-lg font-semibold truncate ${chatHeaderActualTextColor}`}>{currentCharacterForNormalChat.name}</h2>
-                                        {currentCharacterForNormalChat.useActiveHours && ( <span className={`text-xs font-medium px-1.5 py-0.5 rounded-full ${isCharacterActive(currentCharacterForNormalChat) ? (lineThemeActive && !isLineDark ? 'bg-lime-200 text-lime-700':'bg-green-500/20 text-green-400') : (lineThemeActive && !isLineDark ? 'bg-red-200 text-red-700':'bg-red-500/20 text-red-400')}`}> {isCharacterActive(currentCharacterForNormalChat) ? '● オンライン' : `○ オフライン (${currentCharacterForNormalChat.activeHours.start}:00-${currentCharacterForNormalChat.activeHours.end}:00)`} </span> )}
                                     </div>
                                 </>
                             ) : (<h2 className={`text-lg font-semibold ${chatHeaderActualTextColor}`}>キャラクターを選択してください</h2>)}
@@ -2314,7 +1906,36 @@ export default function Home() {
             ) : (
                 <>
                     <div ref={chatMessagesContainerRef} className={`flex-1 overflow-y-auto space-y-1 scroll-smooth custom-scrollbar ${lineThemeActive ? 'p-4' : 'p-2 sm:p-4'}`} style={{ backgroundColor: chatMessagesListActualBg }}>
-                        {currentConversation && currentConversation.messages.map((msg) => ( <MessageItem key={msg.id} msg={msg} currentChatFontSize={chatFontSize} /> ))}
+                        {currentConversation && currentConversation.messages.map((msg) => (
+                            <MessageItem
+                                key={msg.id}
+                                msg={msg}
+                                currentChatFontSize={chatFontSize}
+                                characters={characters}
+                                currentConversation={currentConversation}
+                                currentCharacterForNormalChat={currentCharacterForNormalChat}
+                                editingMessageId={editingMessageId}
+                                editingMessageText={editingMessageText}
+                                setEditingMessageText={setEditingMessageText}
+                                handleCancelEditMessage={handleCancelEditMessage}
+                                handleSaveEditMessage={handleSaveEditMessage}
+                                handleEditMessage={handleEditMessage}
+                                handleRetry={handleRetry}
+                                handleContinueConversation={handleContinueConversation}
+                                isSending={isSending}
+                                isDarkMode={isDarkMode}
+                                lineThemeActive={lineThemeActive}
+                                isLineDark={isLineDark}
+                                effectiveTextColor={effectiveTextColor}
+                                generalTextColor={generalTextColor}
+                                generalInputFieldBgColor={generalInputFieldBgColor}
+                                generalBorderColor={generalBorderColor}
+                                timeAndReadStatusColor={timeAndReadStatusColor}
+                                allowAICustomTextColor={allowAICustomTextColor}
+                                renderFormattedText={renderFormattedText}
+                                formatTime={formatTime}
+                            />
+                        ))}
                         <div ref={messagesEndRef} />
                         {!currentConversation && (
                           <div className="flex flex-col items-center justify-center h-full text-center">
@@ -2363,16 +1984,24 @@ export default function Home() {
             <div className="space-y-4">
               <div> <label className="block text-sm font-medium mb-1.5">名前 <span className="text-red-500">*</span></label> <input type="text" placeholder="例: AIアシスタント" value={editingCharacter ? editingCharacter.name : newCharacter.name} onChange={(e) => editingCharacter ? setEditingCharacter({...editingCharacter, name: e.target.value}) : setNewCharacter({...newCharacter, name: e.target.value})} className={`w-full p-2.5 border rounded-lg shadow-sm ${generalInputFieldBgColor} ${generalTextColor} ${generalBorderColor} focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors`} /> </div>
               <div> <label className="block text-sm font-medium mb-1.5">説明</label> <input type="text" placeholder="例: 親切で協力的" value={editingCharacter ? editingCharacter.description : newCharacter.description} onChange={(e) => editingCharacter ? setEditingCharacter({...editingCharacter, description: e.target.value}) : setNewCharacter({...newCharacter, description: e.target.value})} className={`w-full p-2.5 border rounded-lg shadow-sm ${generalInputFieldBgColor} ${generalTextColor} ${generalBorderColor} focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors`} /> </div>
-              <div> <label className="block text-sm font-medium mb-1.5">アイコン (絵文字)</label> <input type="text" placeholder="例: 🤖" maxLength={2} value={editingCharacter ? editingCharacter.icon : newCharacter.icon} onChange={(e) => editingCharacter ? setEditingCharacter({...editingCharacter, icon: e.target.value}) : setNewCharacter({...newCharacter, icon: e.target.value})} className={`w-full p-2.5 border rounded-lg shadow-sm ${generalInputFieldBgColor} ${generalTextColor} ${generalBorderColor} focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors`} /> </div>
-              <div> <label className="block text-sm font-medium mb-1.5">テーマカラー</label> <input type="color" value={editingCharacter ? editingCharacter.color : newCharacter.color} onChange={(e) => editingCharacter ? setEditingCharacter({...editingCharacter, color: e.target.value}) : setNewCharacter({...newCharacter, color: e.target.value})} className={`w-full h-10 p-1 border rounded-lg shadow-sm ${generalInputFieldBgColor} ${generalBorderColor} cursor-pointer`} /> </div>
-              <div> <label className="block text-sm font-medium mb-1.5">システムプロンプト (指示)</label> <textarea rows={5} placeholder="AIへの指示を入力 (空の場合は自動生成)" value={editingCharacter ? editingCharacter.systemPrompt : newCharacter.systemPrompt} onChange={(e) => editingCharacter ? setEditingCharacter({...editingCharacter, systemPrompt: e.target.value}) : setNewCharacter({...newCharacter, systemPrompt: e.target.value})} className={`w-full p-2.5 border rounded-lg shadow-sm ${generalInputFieldBgColor} ${generalTextColor} ${generalBorderColor} focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm transition-colors`} /> </div>
-              <div className="flex items-center space-x-2 pt-1"> <input type="checkbox" id="useActiveHoursModal" checked={editingCharacter ? editingCharacter.useActiveHours : newCharacter.useActiveHours} onChange={(e) => editingCharacter ? setEditingCharacter({...editingCharacter, useActiveHours: e.target.checked}) : setNewCharacter({...newCharacter, useActiveHours: e.target.checked})} className="h-4 w-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500 cursor-pointer" /> <label htmlFor="useActiveHoursModal" className="text-sm cursor-pointer select-none">活動時間を設定</label> </div>
-              {(editingCharacter ? editingCharacter.useActiveHours : newCharacter.useActiveHours) && (
-                <div className="grid grid-cols-2 gap-4">
-                  <div> <label className="block text-xs font-medium">開始 (0-23時)</label> <input type="number" min="0" max="23" value={editingCharacter ? editingCharacter.activeHours.start : newCharacter.activeHours.start} onChange={(e) => { const val = parseInt(e.target.value); if (editingCharacter) setEditingCharacter({...editingCharacter, activeHours: {...editingCharacter.activeHours, start: val}}); else setNewCharacter({...newCharacter, activeHours: {...newCharacter.activeHours, start: val}}); }} className={`w-full p-2.5 border rounded-lg shadow-sm ${generalInputFieldBgColor} ${generalTextColor} ${generalBorderColor} focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors`} /> </div>
-                  <div> <label className="block text-xs font-medium">終了 (0-23時)</label> <input type="number" min="0" max="23" value={editingCharacter ? editingCharacter.activeHours.end : newCharacter.activeHours.end} onChange={(e) => { const val = parseInt(e.target.value); if (editingCharacter) setEditingCharacter({...editingCharacter, activeHours: {...editingCharacter.activeHours, end: val}}); else setNewCharacter({...newCharacter, activeHours: {...newCharacter.activeHours, end: val}}); }} className={`w-full p-2.5 border rounded-lg shadow-sm ${generalInputFieldBgColor} ${generalTextColor} ${generalBorderColor} focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors`} /> </div>
+              <div>
+                <label className="block text-sm font-medium mb-1.5">アイコン (画像アップロード)</label>
+                <div className="flex items-center space-x-3">
+                    <div className="w-12 h-12 rounded-full overflow-hidden bg-gray-200 border shadow-sm">
+                        {(editingCharacter?.icon || newCharacter.icon) ? (
+                            <img src={editingCharacter ? editingCharacter.icon : newCharacter.icon} alt="icon preview" className="w-full h-full object-cover" />
+                        ) : (
+                            <span className="flex items-center justify-center w-full h-full text-gray-400">?</span>
+                        )}
+                    </div>
+                    <button onClick={() => characterIconInputRef.current?.click()} className={`px-3 py-1.5 text-sm rounded-lg border ${generalBorderColor} hover:${isDarkMode ? 'bg-slate-700' : 'bg-slate-100'} transition-colors`}>
+                        画像を選択
+                    </button>
+                    <input ref={characterIconInputRef} type="file" accept="image/*" className="hidden" onChange={handleCharacterIconChange} />
                 </div>
-              )}
+                <p className="text-xs text-gray-500 mt-1">※ 2MB以下の画像 (1000x1000px以内推奨)</p>
+              </div>
+              <div> <label className="block text-sm font-medium mb-1.5">システムプロンプト (指示)</label> <textarea rows={5} placeholder="AIへの指示を入力 (空の場合は自動生成)" value={editingCharacter ? editingCharacter.systemPrompt : newCharacter.systemPrompt} onChange={(e) => editingCharacter ? setEditingCharacter({...editingCharacter, systemPrompt: e.target.value}) : setNewCharacter({...newCharacter, systemPrompt: e.target.value})} className={`w-full p-2.5 border rounded-lg shadow-sm ${generalInputFieldBgColor} ${generalTextColor} ${generalBorderColor} focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm transition-colors`} /> </div>
               <div className="flex items-center space-x-2 pt-1"> <input type="checkbox" id="useGaugesModal" checked={editingCharacter ? editingCharacter.useGauges : newCharacter.useGauges} onChange={(e) => editingCharacter ? setEditingCharacter({...editingCharacter, useGauges: e.target.checked}) : setNewCharacter({...newCharacter, useGauges: e.target.checked})} className="h-4 w-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500 cursor-pointer" /> <label htmlFor="useGaugesModal" className="text-sm cursor-pointer select-none">感情ゲージを使用する</label> </div>
             </div>
             <div className="mt-6 flex flex-col sm:flex-row justify-between items-center gap-3">
@@ -2518,7 +2147,6 @@ export default function Home() {
           onCancel={() => {
             setShowDeleteConversationDialog(false);
             setConversationToDeleteId(null);
-            console.log("Conversation deletion cancelled for ID:", conversationToDeleteId);
           }}
           confirmText="削除"
           cancelText="キャンセル"
@@ -2536,7 +2164,6 @@ export default function Home() {
             setShowDeleteCharacterDialog(false);
             setCharacterToDeleteId(null);
             setCharacterDeleteMessage('');
-            console.log("Character deletion cancelled for ID:", characterToDeleteId);
           }}
           confirmText="削除"
           cancelText="キャンセル"
@@ -2579,7 +2206,6 @@ export default function Home() {
             <p>
               <a href="https://docs.google.com/forms/d/e/1FAIpQLSc3222WWs054-i-p2ChEg-h-p-1Gf-o-2-3_L2-E-X-y-E-w/viewform?usp=sf_link" target="_blank" rel="noopener noreferrer" className="hover:underline">お問い合わせ</a> | プライバシーポリシー: チャットログは収集しません
             </p>
-            <p className="font-semibold text-red-500">18歳未満の方のご利用は固く禁じます。</p>
           </div>
         )}
       </footer>
