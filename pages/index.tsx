@@ -1352,6 +1352,34 @@ export default function Home() {
   }, [editingCharacter, newCharacter]);
 
 
+  const currentCharacterOrParticipants = useMemo(() => {
+    if (currentConversation?.isCharToCharConversation && currentConversation.participantCharacterIds) {
+      const char1 = characters.find(c => c.id === currentConversation.participantCharacterIds![0]);
+      const char2 = characters.find(c => c.id === currentConversation.participantCharacterIds![1]);
+      return { char1, char2 };
+    }
+    return { char1: currentCharacterForNormalChat, char2: null };
+  }, [currentConversation, characters, currentCharacterForNormalChat]);
+
+  const sidebarConversations = useMemo(() => {
+    return conversations
+        .filter(conv => {
+            if (conv.isGroupChat) return true; // Always show group chats
+            if (conv.isCharToCharConversation) return true; // Always show char-to-char chats
+
+            // For 1-on-1 chats:
+            // If a currentCharacterId is selected (meaning user is focused on a 1-on-1 context),
+            // only show 1-on-1 conversations for that specific character.
+            // If no currentCharacterId is selected (e.g., app just loaded, or after viewing a non-1-on-1 chat like a group chat),
+            // show all 1-on-1 chats.
+            if (!conv.isGroupChat && !conv.isCharToCharConversation) { // This is a 1-on-1 chat
+                return !currentCharacterId || conv.characterId === currentCharacterId;
+            }
+            return false; // Should ideally not be reached if all conversation types are handled above
+        })
+        .sort((a, b) => parseInt(b.id) - parseInt(a.id));
+  }, [conversations, currentCharacterId]);
+
   const isLineDark = useMemo(() => lineThemeActive && isDarkMode, [lineThemeActive, isDarkMode]);
   const generalTextColor = useMemo(() => (isDarkMode ? 'text-slate-200' : 'text-slate-700'), [isDarkMode]);
   const generalPanelBgColor = useMemo(() => (isDarkMode ? 'bg-slate-800' : 'bg-white'), [isDarkMode]);
