@@ -29,8 +29,6 @@ export interface Character {
   systemPrompt: string
   icon: string
   isPublic: boolean
-  gauges: EmotionGauges;
-  useGauges: boolean;
 }
 
 export interface Conversation {
