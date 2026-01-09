@@ -475,6 +475,11 @@ export default function Home() {
 
       if (!confirm(`「${editingCharacter.name}」を公開しますか？\n公開されたキャラクターは誰でも使用できるようになります。`)) return;
 
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        alert('オフラインのようです。インターネット接続を確認してください。');
+        return;
+      }
+
       setIsPublishing(true);
       try {
           const userId = getOrCreateAnonymousUserId();
@@ -482,25 +487,30 @@ export default function Home() {
 
           // 1. Upload Icon if it's a Data URL
           if (editingCharacter.icon.startsWith('data:')) {
-              const fileExt = 'png'; // Assuming png for simplicity with data URLs mostly
-              const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
-              const filePath = `${userId}/${fileName}`;
+              try {
+                const fileExt = 'png'; // Assuming png for simplicity with data URLs mostly
+                const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+                const filePath = `${userId}/${fileName}`;
 
-              // Convert Data URL to Blob
-              const res = await fetch(editingCharacter.icon);
-              const blob = await res.blob();
+                // Convert Data URL to Blob
+                const res = await fetch(editingCharacter.icon);
+                const blob = await res.blob();
 
-              const { data, error: uploadError } = await supabase.storage
-                  .from('character-icons')
-                  .upload(filePath, blob);
+                const { data, error: uploadError } = await supabase.storage
+                    .from('character-icons')
+                    .upload(filePath, blob);
 
-              if (uploadError) throw uploadError;
+                if (uploadError) throw new Error(`アイコンのアップロードに失敗しました: ${uploadError.message}`);
 
-              const { data: { publicUrl } } = supabase.storage
-                  .from('character-icons')
-                  .getPublicUrl(filePath);
+                const { data: { publicUrl } } = supabase.storage
+                    .from('character-icons')
+                    .getPublicUrl(filePath);
 
-              iconUrl = publicUrl;
+                iconUrl = publicUrl;
+              } catch (e: any) {
+                console.error('Icon upload error:', e);
+                throw new Error(`アイコン画像の処理中にエラーが発生しました: ${e.message}`);
+              }
           }
 
           // 2. Insert into Supabase
@@ -519,7 +529,7 @@ export default function Home() {
               .select()
               .single();
 
-          if (insertError) throw insertError;
+          if (insertError) throw new Error(`データベースへの保存に失敗しました: ${insertError.message}`);
 
           // 3. Update Local Character
           const updatedLocalChar: Character = {
