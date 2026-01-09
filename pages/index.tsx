@@ -519,23 +519,42 @@ export default function Home() {
               }
           }
 
-          // 2. Insert into Supabase
-          const { data: insertedData, error: insertError } = await supabase
-              .from('public_characters')
-              .insert([
-                  {
-                      name: editingCharacter.name,
-                      description: editingCharacter.description,
-                      system_prompt: editingCharacter.systemPrompt,
-                      icon_url: iconUrl,
-                      author_id: userId,
-                      parent_id: editingCharacter.parent_id || null, // For remix
-                  }
-              ])
-              .select()
-              .single();
+          // 2. Insert into Supabase (with Retry)
+          let insertedData = null;
+          let insertError = null;
+          const MAX_RETRIES = 3;
 
-          if (insertError) throw new Error(`データベースへの保存に失敗しました: ${insertError.message}`);
+          for (let i = 0; i < MAX_RETRIES; i++) {
+            try {
+                const { data, error } = await supabase
+                    .from('public_characters')
+                    .insert([
+                        {
+                            name: editingCharacter.name,
+                            description: editingCharacter.description,
+                            system_prompt: editingCharacter.systemPrompt,
+                            icon_url: iconUrl,
+                            author_id: userId,
+                            parent_id: editingCharacter.parent_id || null, // For remix
+                        }
+                    ])
+                    .select()
+                    .single();
+
+                if (error) throw error;
+                insertedData = data;
+                insertError = null;
+                break; // Success, exit loop
+            } catch (e) {
+                insertError = e;
+                if (i < MAX_RETRIES - 1) {
+                    console.warn(`Insert failed, retrying (${i + 1}/${MAX_RETRIES})...`, e);
+                    await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1))); // Exponential backoff
+                }
+            }
+          }
+
+          if (insertError) throw new Error(`データベースへの保存に失敗しました: ${(insertError as any).message || insertError}`);
 
           // 3. Update Local Character
           const updatedLocalChar: Character = {
