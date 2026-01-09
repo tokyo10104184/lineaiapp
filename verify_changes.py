@@ -1,92 +1,98 @@
-
 from playwright.sync_api import sync_playwright, expect
+import time
 
-def run(playwright):
-    browser = playwright.chromium.launch(headless=True)
-    context = browser.new_context()
-    page = context.new_page()
+def verify_frontend():
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        context = browser.new_context(viewport={'width': 1280, 'height': 720})
+        page = context.new_page()
 
-    # 1. Navigate to Home
-    print("Navigating to home page...")
-    page.goto("http://localhost:3000")
+        try:
+            print("Navigating to http://localhost:3000...")
+            page.goto("http://localhost:3000")
+            page.wait_for_load_state("networkidle")
 
-    # Wait for the page to load major elements
-    page.wait_for_timeout(3000)
+            # Screenshot initial state
+            page.screenshot(path="verification_initial.png")
+            print("Initial screenshot taken.")
 
-    # 1.5 Handle Age Verification if present
-    print("Checking for Age Verification...")
-    try:
-        # "はい" button
-        yes_btn = page.get_by_role("button", name="はい")
-        if yes_btn.is_visible():
-            print("Clicking Age Verification 'Yes'...")
-            yes_btn.click()
-            page.wait_for_timeout(1000)
-    except Exception as e:
-        print(f"Age verification handling error (might not be present): {e}")
+            # Handle Age Verification
+            print("Handling Age Verification...")
+            try:
+                # Wait for the modal content
+                expect(page.get_by_text("あなたは18歳以上ですか？")).to_be_visible(timeout=5000)
+                page.get_by_role("button", name="はい").click()
+                print("Clicked 'はい'")
+                time.sleep(1) # Wait for animation
+            except Exception as e:
+                print(f"Age verification handling warning: {e}")
 
-    # 2. Check for absence of removed features on main page
-    print("Checking for absence of User Menu / Login...")
+            # 1. Verify Public Character List is visible
+            print("Verifying Public Character List...")
+            # It might be behind loading spinner or something, but header should be there
+            try:
+                expect(page.get_by_text("公開キャラクター")).to_be_visible(timeout=10000)
+            except AssertionError:
+                print("Could not find '公開キャラクター'. Taking debug screenshot.")
+                page.screenshot(path="verification_debug.png")
+                raise
 
-    # Take screenshot of main page
-    page.screenshot(path="verification_main.png")
-    print("Main page screenshot taken.")
+            # Take screenshot of the main list
+            page.screenshot(path="verification_main.png")
+            print("Main list screenshot taken.")
 
-    # 3. Open Settings Modal
-    print("Opening Settings Modal...")
-    try:
-        # Try to find the settings button again.
-        # It's an icon button, usually in the header or sidebar.
-        # Based on previous log: <button title="設定" ...>
-        page.get_by_title("設定").click()
+            # 2. Verify Character Settings (Publish Button)
+            # Need to select a character (Yuki)
+            print("Selecting character 'ユキ' from sidebar...")
 
-        # Wait for modal
-        page.wait_for_timeout(1000)
+            # If sidebar is hidden (mobile), open it. But we are 1280px wide.
 
-        # Take screenshot of settings
-        page.screenshot(path="verification_settings.png")
-        print("Settings modal screenshot taken.")
+            # Click Yuki in sidebar
+            # Note: sidebar items might be loaded via client-side logic.
+            # We need to find the element that contains 'ユキ' and click it.
+            # There might be multiple 'ユキ' (in list and potentially in main area if we selected her).
+            # The sidebar item usually has a class or structure.
+            # Let's just click the first text "ユキ" found.
+            page.get_by_text("ユキ").first.click()
 
-        # Verify absence of Cheat Mode, Memory, Gauges in the text of the modal
-        content = page.locator(".fixed").inner_text() # Get text of the modal
-        assert "Cheat Mode" not in content
-        assert "Memory" not in content
-        assert "Gauges" not in content
-        assert "感情パラメーター" not in content # Emotion parameters
-        print("Verified absence of removed settings.")
+            # Hover and click Edit
+            print("Clicking Edit button...")
+            # The edit button appears on hover in the sidebar item.
+            # Let's target the sidebar item specifically if possible.
+            # Or just blindly click the edit icon (FaEdit) if visible.
+            # It has title="キャラクター編集"
 
-        # Close settings
-        page.get_by_role("button", name="閉じる").click() # Close button
-        page.wait_for_timeout(500)
+            # Force hover on the sidebar item containing Yuki
+            # Assuming the layout: Sidebar -> Item -> [Icon, Name, Buttons]
+            # We can find the edit button by title.
+            # But there are multiple edit buttons (one per character).
+            # We need the first one (corresponding to Yuki if she is top).
+            # Actually, Yuki is top in default list.
 
-    except Exception as e:
-        print(f"Settings verification failed: {e}")
+            # Use JS to force click to avoid hover issues in headless
+            # page.get_by_title("キャラクター編集").first.click()
+            # But hover is needed for opacity-0?
+            # CSS: group-hover:opacity-100. Playwright hover triggers this.
 
-    # 4. Open Character Selection
-    print("Opening Character Selection...")
-    try:
-        # "Change Character" button
-        # It might be an icon or text.
-        # In the sidebar, there is usually a list of characters or a button.
-        # Let's try to find a button with "キャラクター" in text or title if "Change Character" fails.
-        # Or look for the green + button or similar.
-        # Let's try a generic click on the sidebar character item if it exists.
+            page.get_by_text("ユキ").first.hover()
+            page.get_by_title("キャラクター編集").first.click()
 
-        # If there is a button with title "キャラクター変更" or similar.
-        # In previous logs, it failed to find "キャラクター変更".
+            # Verify "公開済み" or "Publish" button
+            # Since default characters have isPublic=true (simulated in index.tsx), it should say "公開済み"
+            expect(page.get_by_text("公開済み")).to_be_visible()
 
-        # Let's try to verify Marketplace is gone from the main page first (since viewMode was removed).
-        content = page.content()
-        assert "Marketplace" not in content
-        assert "マーケットプレイス" not in content
-        print("Verified absence of Marketplace.")
+            page.screenshot(path="verification_settings.png")
+            print("Settings screenshot taken.")
 
-    except Exception as e:
-        print(f"Character verification failed: {e}")
+            # Close settings
+            page.get_by_text("キャンセル").click()
 
-    page.screenshot(path="verification_final.png")
+        except Exception as e:
+            print(f"Error: {e}")
+            page.screenshot(path="verification_error.png")
+            raise e
+        finally:
+            browser.close()
 
-    browser.close()
-
-with sync_playwright() as playwright:
-    run(playwright)
+if __name__ == "__main__":
+    verify_frontend()

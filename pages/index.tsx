@@ -4,9 +4,10 @@ import {
     FaUserCircle, FaImage, FaPlus, FaEdit, FaTimes, FaRobot, FaTrash, FaPaperPlane,
     FaBars, FaQuestionCircle, FaPaperclip, FaTimesCircle, FaComments,
     FaPlay, FaStop, FaFistRaised, FaBalanceScale, FaCommentDots, FaSave, FaUndo, FaUsers, FaCog, FaChartBar, FaStore, FaMagic,
-    FaCloudUploadAlt, FaCloudDownloadAlt, FaBrain, FaRedo
+    FaCloudUploadAlt, FaCloudDownloadAlt, FaBrain, FaRedo, FaGlobe, FaProjectDiagram
 } from 'react-icons/fa';
 import { DmmBanner } from '../components/DmmBanner';
+import { supabase } from '../lib/supabase';
 import ConfirmationDialog from '../components/ui/ConfirmationDialog';
 import GroupChatCreationModal from '../components/GroupChatCreationModal';
 import CharacterSelectionModal from '../components/CharacterSelectionModal';
@@ -17,9 +18,11 @@ import GaugesModal from '../components/GaugesModal';
 import QuickCreateCharacterModal, { CreatorPersona } from '../components/QuickCreateCharacterModal';
 import Marketplace from '../components/Marketplace';
 import MessageItem from '../components/MessageItem';
+import PublicCharacterList from '../components/PublicCharacterList';
+import RemixTreeModal from '../components/RemixTreeModal';
 import { FORMATTING_INSTRUCTIONS_PROMPT, CREATOR_PERSONA_PROMPTS } from '../lib/prompts';
 import { Message, Character, Conversation, ChutesApiRequestBody, EmotionGauges } from '../lib/types';
-import { renderFormattedText } from '../lib/utils';
+import { renderFormattedText, getOrCreateAnonymousUserId } from '../lib/utils';
 
 // --- Constants ---
 const SWIPE_THRESHOLD = 50;
@@ -109,7 +112,9 @@ export default function Home() {
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editingMessageText, setEditingMessageText] = useState<string>('');
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isPublishing, setIsPublishing] = useState(false);
   const [publishingCharacterId, setPublishingCharacterId] = useState<string | null>(null);
+  const [remixBaseCharacter, setRemixBaseCharacter] = useState<Character | null>(null);
   const [isSavingMemory, setIsSavingMemory] = useState(false);
 
   const [showDeleteConversationDialog, setShowDeleteConversationDialog] = useState(false);
@@ -123,6 +128,7 @@ export default function Home() {
   const [showQuickCreateModal, setShowQuickCreateModal] = useState(false);
   const [showNewCharacterChoiceModal, setShowNewCharacterChoiceModal] = useState(false);
   const [isAIEditModalOpen, setIsAIEditModalOpen] = useState(false);
+  const [showRemixTreeModal, setShowRemixTreeModal] = useState(false);
   const [isFooterOpen, setIsFooterOpen] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -455,6 +461,77 @@ export default function Home() {
     setEditingCharacter(null); setShowCharacterDialog(false);
   }, [editingCharacter, generateSystemPrompt]);
 
+  const handlePublishCharacter = useCallback(async () => {
+      if (!editingCharacter) return;
+      if (!confirm(`「${editingCharacter.name}」を公開しますか？\n公開されたキャラクターは誰でも使用できるようになります。`)) return;
+
+      setIsPublishing(true);
+      try {
+          const userId = getOrCreateAnonymousUserId();
+          let iconUrl = editingCharacter.icon;
+
+          // 1. Upload Icon if it's a Data URL
+          if (editingCharacter.icon.startsWith('data:')) {
+              const fileExt = 'png'; // Assuming png for simplicity with data URLs mostly
+              const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+              const filePath = `${userId}/${fileName}`;
+
+              // Convert Data URL to Blob
+              const res = await fetch(editingCharacter.icon);
+              const blob = await res.blob();
+
+              const { data, error: uploadError } = await supabase.storage
+                  .from('character-icons')
+                  .upload(filePath, blob);
+
+              if (uploadError) throw uploadError;
+
+              const { data: { publicUrl } } = supabase.storage
+                  .from('character-icons')
+                  .getPublicUrl(filePath);
+
+              iconUrl = publicUrl;
+          }
+
+          // 2. Insert into Supabase
+          const { data: insertedData, error: insertError } = await supabase
+              .from('public_characters')
+              .insert([
+                  {
+                      name: editingCharacter.name,
+                      description: editingCharacter.description,
+                      system_prompt: editingCharacter.systemPrompt,
+                      icon_url: iconUrl,
+                      author_id: userId,
+                      parent_id: editingCharacter.parent_id || null, // For remix
+                  }
+              ])
+              .select()
+              .single();
+
+          if (insertError) throw insertError;
+
+          // 3. Update Local Character
+          const updatedLocalChar: Character = {
+              ...editingCharacter,
+              icon: iconUrl, // Update to public URL locally too to save space
+              isPublic: true,
+              public_id: insertedData.id,
+              author_id: userId,
+          };
+
+          setCharacters(prev => prev.map(c => c.id === editingCharacter.id ? updatedLocalChar : c));
+          setEditingCharacter(updatedLocalChar);
+          alert('キャラクターを公開しました！');
+
+      } catch (error: any) {
+          console.error('Error publishing character:', error);
+          alert(`公開中にエラーが発生しました: ${error.message || error}`);
+      } finally {
+          setIsPublishing(false);
+      }
+  }, [editingCharacter]);
+
   const switchToCharacter = useCallback((characterId: string) => {
     setCurrentCharacterId(characterId);
     if (window.innerWidth < 1024) setSidebarOpen(false);
@@ -512,7 +589,9 @@ export default function Home() {
             systemPrompt: generatedPrompt,
             name: '',
             description: userPrompt.substring(0, 50),
+            parent_id: remixBaseCharacter?.public_id || null, // Ensure parent_id is set if remixing
         }));
+        setRemixBaseCharacter(null); // Clear remix state after generation
         setShowQuickCreateModal(false);
         setShowCharacterDialog(true);
 
@@ -1333,14 +1412,48 @@ export default function Home() {
       <NewCharacterChoiceModal
         isOpen={showNewCharacterChoiceModal}
         onClose={() => setShowNewCharacterChoiceModal(false)}
+        baseCharacter={remixBaseCharacter}
         onManualCreate={() => {
-          setEditingCharacter(null);
-          setNewCharacter({ name: '', description: '', systemPrompt: '', icon: PLACEHOLDER_ICON, isPublic: false });
+          if (remixBaseCharacter) {
+             setEditingCharacter({
+                 ...remixBaseCharacter,
+                 id: Date.now().toString(), // New local ID
+                 public_id: null, // Reset public ID as it is a new fork
+                 isPublic: false,
+                 parent_id: remixBaseCharacter.public_id || null, // Track parent
+             });
+             setRemixBaseCharacter(null);
+          } else {
+             setEditingCharacter(null);
+             setNewCharacter({ name: '', description: '', systemPrompt: '', icon: PLACEHOLDER_ICON, isPublic: false });
+          }
           setShowCharacterDialog(true);
         }}
-        onQuickCreate={() => setShowQuickCreateModal(true)}
+        onQuickCreate={() => {
+            // For AI Remix, we might want to handle it in QuickCreateCharacterModal or similar
+            // Currently QuickCreateCharacterModal only takes a prompt.
+            // Ideally we pass the base character info to it.
+            // For now, let's just open the modal, and we'll need to update QuickCreate to handle 'remix' mode if we want strict AI remixing.
+            // Or simpler: Just open the modal and let the user type "Make her more tsundere" and we append the base char info to the system prompt in the background.
+            // Let's pass the remixBaseCharacter to QuickCreateCharacterModal via state or prop if possible.
+            // But QuickCreateCharacterModal doesn't accept props for this yet.
+            // Let's just stick to the flow -> Show Quick Modal -> User types -> We append context.
+            setShowQuickCreateModal(true);
+            // Note: strict context passing for AI remix in Quick Modal would require updating that modal too.
+            // Given the plan scope, let's keep it simple or update QuickCreateCharacterModal next if needed.
+        }}
         isDarkMode={isDarkMode}
       />
+
+      {showRemixTreeModal && (
+          <RemixTreeModal
+            isOpen={showRemixTreeModal}
+            onClose={() => setShowRemixTreeModal(false)}
+            rootCharacterId={currentCharacterForNormalChat?.public_id || editingCharacter?.public_id || ''}
+            characterName={currentCharacterForNormalChat?.name || editingCharacter?.name || ''}
+            isDarkMode={isDarkMode}
+          />
+      )}
 
       {showCharacterSelection && (
         <CharacterSelectionModal
@@ -1386,10 +1499,28 @@ export default function Home() {
 
       <QuickCreateCharacterModal
         isOpen={showQuickCreateModal}
-        onClose={() => setShowQuickCreateModal(false)}
+        onClose={() => { setShowQuickCreateModal(false); setRemixBaseCharacter(null); }}
         isDarkMode={isDarkMode}
         isGenerating={isGenerating}
-        onGenerate={handleGeneratePrompt}
+        onGenerate={(persona, userPrompt) => {
+             // Wrap the handleGeneratePrompt to inject remix context if needed
+             let finalPrompt = userPrompt;
+             if (remixBaseCharacter) {
+                 finalPrompt = `ベースとなるキャラクター:
+名前: ${remixBaseCharacter.name}
+性格: ${remixBaseCharacter.description}
+システムプロンプト: ${remixBaseCharacter.systemPrompt}
+
+ユーザーの指示: ${userPrompt}
+(上記のベースキャラクターを元に、ユーザーの指示に従って新しいキャラクター設定を作成してください)`;
+             }
+             handleGeneratePrompt(persona, finalPrompt);
+             // handleGeneratePrompt sets newCharacter. We might want to set parent_id there too.
+             // But handleGeneratePrompt implementation just sets 'newCharacter'.
+             // We can use a useEffect or modify handleGeneratePrompt.
+             // Let's modify handleGeneratePrompt separately or here via side effect?
+             // Actually, modifying handleGeneratePrompt is cleaner.
+        }}
       />
 
       <div className="flex flex-1 overflow-hidden">
@@ -1573,6 +1704,15 @@ export default function Home() {
                             ) : (<h2 className={`text-lg font-semibold ${chatHeaderActualTextColor}`}>キャラクターを選択してください</h2>)}
                         </div>
                         <div className="flex items-center space-x-2">
+                          {currentCharacterForNormalChat?.public_id && (currentCharacterForNormalChat.parent_id || true) && (
+                              <button
+                                onClick={() => setShowRemixTreeModal(true)}
+                                className={`p-2.5 rounded-md hover:${isDarkMode || (lineThemeActive && isLineDark)?'bg-slate-700/70':'bg-slate-200/70'} ${chatHeaderActualTextColor} transition-colors`}
+                                title="リミックスツリーを表示"
+                              >
+                                  <FaProjectDiagram size={18} />
+                              </button>
+                          )}
                           {currentConversation?.isCharToCharConversation && (
                               <button onClick={toggleAutoReply} className={`p-2.5 rounded-md ${isAutoReplying ? (lineThemeActive && !isLineDark ? 'bg-red-200 text-red-700 hover:bg-red-300' : 'bg-red-500/20 text-red-400 hover:bg-red-500/30') : (lineThemeActive && !isLineDark ? 'bg-green-200 text-green-700 hover:bg-green-300' : 'bg-green-500/20 text-green-400 hover:bg-green-500/30')} transition-colors`} title={isAutoReplying ? "自動会話を停止" : "自動会話を開始/再開"}>
                                   {isAutoReplying ? <FaStop size={18} /> : <FaPlay size={18} />}
@@ -1617,16 +1757,32 @@ export default function Home() {
                         ))}
                         <div ref={messagesEndRef} />
                         {!currentConversation && (
-                          <div className="flex flex-col items-center justify-center h-full text-center">
-                            <h2 className={`text-2xl font-bold mb-4 ${generalTextColor}`}>Kintへようこそ</h2>
-                            <p className={`mb-8 ${generalTextColor}`}>始めるには、下のボタンを押してください。</p>
-                            <button
-                              onClick={() => setShowCharacterSelection(true)}
-                              className="px-8 py-4 bg-pink-500 text-white font-bold rounded-lg shadow-lg hover:bg-pink-600 transition-colors"
-                            >
-                              始める
-                            </button>
-                          </div>
+                           <PublicCharacterList
+                             onSelectCharacter={(char) => {
+                               // Check if we already have this public character downloaded/saved
+                               const existing = characters.find(c => c.public_id === char.public_id);
+                               if (existing) {
+                                   switchToCharacter(existing.id);
+                               } else {
+                                   // Import functionality
+                                   const newChar = { ...char, id: Date.now().toString() };
+                                   setCharacters(prev => [newChar, ...prev]);
+                                   setCurrentCharacterId(newChar.id);
+                                   createNewConversation(newChar.id);
+                               }
+                             }}
+                             onRemixCharacter={(baseChar) => {
+                                 setEditingCharacter(null); // Ensure we are not editing an existing one
+                                 // Pass base char to a new state or direct to modal
+                                 // We need to modify NewCharacterChoiceModal to accept this baseChar
+                                 // For now, let's use a temporary state or prop drill
+                                 // Let's store it in a ref or state
+                                 // I'll add a new state for 'remixBaseCharacter'
+                                 setRemixBaseCharacter(baseChar);
+                                 setShowNewCharacterChoiceModal(true);
+                             }}
+                             isDarkMode={isDarkMode}
+                           />
                         )}
                     </div>
                     {currentConversation && !currentConversation.isCharToCharConversation && QUICK_MESSAGES.length > 0 && (
@@ -1687,6 +1843,30 @@ export default function Home() {
                 <button onClick={() => setIsAIEditModalOpen(true)} disabled={!editingCharacter} className={`px-5 py-2.5 rounded-lg border ${generalBorderColor} hover:${isDarkMode?'bg-slate-700/70':'bg-slate-100'} transition-colors duration-150 w-full sm:w-auto ${generalTextColor} font-medium shadow-sm flex items-center disabled:opacity-50 disabled:cursor-not-allowed`}><FaMagic className="mr-2 text-indigo-400" /> AIで編集</button>
               </div>
               <div className="flex flex-col sm:flex-row gap-3 sm:gap-2 w-full sm:w-auto">
+                {editingCharacter && !editingCharacter.isPublic && (
+                    <button
+                        onClick={handlePublishCharacter}
+                        disabled={isPublishing}
+                        className={`px-5 py-2.5 rounded-lg bg-yellow-500 hover:bg-yellow-600 text-white font-medium shadow-sm transition-colors duration-150 flex items-center justify-center ${isPublishing ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        title="キャラクターを公開する"
+                    >
+                        {isPublishing ? '公開中...' : <><FaGlobe className="mr-2" /> 公開</>}
+                    </button>
+                )}
+                {editingCharacter && editingCharacter.isPublic && (
+                    <div className="flex items-center space-x-2">
+                        <div className="px-3 py-2 text-sm text-yellow-600 dark:text-yellow-400 font-medium flex items-center">
+                             <FaGlobe className="mr-1" /> 公開済み
+                        </div>
+                        <button
+                            onClick={() => setShowRemixTreeModal(true)}
+                            className="px-3 py-2 text-sm text-indigo-600 dark:text-indigo-400 font-medium flex items-center hover:underline"
+                            title="リミックスツリー"
+                        >
+                             <FaProjectDiagram className="mr-1" /> ツリー
+                        </button>
+                    </div>
+                )}
                 <button onClick={() => { setShowCharacterDialog(false); setEditingCharacter(null); }} className={`px-6 py-2.5 rounded-lg border ${generalBorderColor} hover:${isDarkMode?'bg-slate-700/70':'bg-slate-100'} transition-colors duration-150 w-full sm:w-auto ${generalTextColor} font-medium shadow-sm`}> キャンセル </button>
                 <button onClick={editingCharacter ? saveCharacterEdit : addCharacter} className={`px-6 py-2.5 rounded-lg text-white font-medium ${editingCharacter ? 'bg-green-600 hover:bg-green-700 active:bg-green-800' : 'bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800'} transition-colors duration-150 w-full sm:w-auto shadow-md`}> {editingCharacter ? '保存' : '作成'} </button>
               </div>

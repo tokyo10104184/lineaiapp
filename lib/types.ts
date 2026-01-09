@@ -29,6 +29,8 @@ export interface Character {
   systemPrompt: string
   icon: string
   isPublic: boolean
+  author_id?: string; // Anonymous User ID of the creator
+  parent_id?: string | null; // For remixes: ID of the original public character
 }
 
 export interface Conversation {
