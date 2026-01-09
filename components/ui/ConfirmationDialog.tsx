@@ -8,6 +8,7 @@ interface ConfirmationDialogProps {
   onCancel: () => void;
   confirmText?: string;
   cancelText?: string;
+  confirmButtonColor?: 'red' | 'blue' | 'green';
   isDarkMode?: boolean; // Optional, for styling consistency if needed from caller
 }
 
@@ -19,6 +20,7 @@ const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({
   onCancel,
   confirmText = "Confirm",
   cancelText = "Cancel",
+  confirmButtonColor = 'red',
   isDarkMode = false, // Default to false if not provided
 }) => {
   if (!isOpen) {
@@ -33,8 +35,17 @@ const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({
   const cancelButtonHoverBgColor = isDarkMode ? 'hover:bg-slate-700' : 'hover:bg-slate-50';
 
   // Specific styling for confirm button (often red for destructive actions)
-  const confirmButtonBgColor = 'bg-red-600';
-  const confirmButtonHoverBgColor = 'hover:bg-red-700';
+  let confirmButtonBgColor = 'bg-red-600';
+  let confirmButtonHoverBgColor = 'hover:bg-red-700';
+
+  if (confirmButtonColor === 'blue') {
+    confirmButtonBgColor = 'bg-blue-600';
+    confirmButtonHoverBgColor = 'hover:bg-blue-700';
+  } else if (confirmButtonColor === 'green') {
+    confirmButtonBgColor = 'bg-green-600';
+    confirmButtonHoverBgColor = 'hover:bg-green-700';
+  }
+
   const confirmButtonTextColor = 'text-white';
 
 

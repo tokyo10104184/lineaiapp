@@ -117,6 +117,7 @@ export default function Home() {
   const [remixBaseCharacter, setRemixBaseCharacter] = useState<Character | null>(null);
   const [isSavingMemory, setIsSavingMemory] = useState(false);
 
+  const [showPublishConfirmationDialog, setShowPublishConfirmationDialog] = useState(false);
   const [showDeleteConversationDialog, setShowDeleteConversationDialog] = useState(false);
   const [conversationToDeleteId, setConversationToDeleteId] = useState<string | null>(null);
   const [showDeleteCharacterDialog, setShowDeleteCharacterDialog] = useState(false);
@@ -461,24 +462,29 @@ export default function Home() {
     setEditingCharacter(null); setShowCharacterDialog(false);
   }, [editingCharacter, generateSystemPrompt]);
 
-  const handlePublishCharacter = useCallback(async () => {
-      if (!editingCharacter) return;
+  const openPublishConfirmation = useCallback(() => {
+    if (!editingCharacter) return;
 
-      // Check Supabase Config
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-      const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    // Check Supabase Config
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-      if (!supabaseUrl || !supabaseKey || supabaseUrl.includes('placeholder')) {
-          alert('Supabaseの設定が完了していません。\n.env.localファイルを確認し、開発サーバーを再起動してください。');
-          return;
-      }
-
-      if (!confirm(`「${editingCharacter.name}」を公開しますか？\n公開されたキャラクターは誰でも使用できるようになります。`)) return;
-
-      if (typeof navigator !== 'undefined' && !navigator.onLine) {
-        alert('オフラインのようです。インターネット接続を確認してください。');
+    if (!supabaseUrl || !supabaseKey || supabaseUrl.includes('placeholder')) {
+        alert('Supabaseの設定が完了していません。\n.env.localファイルを確認し、開発サーバーを再起動してください。');
         return;
-      }
+    }
+
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      alert('オフラインのようです。インターネット接続を確認してください。');
+      return;
+    }
+
+    setShowPublishConfirmationDialog(true);
+  }, [editingCharacter]);
+
+  const executePublishCharacter = useCallback(async () => {
+      if (!editingCharacter) return;
+      setShowPublishConfirmationDialog(false);
 
       setIsPublishing(true);
       try {
@@ -1865,7 +1871,7 @@ export default function Home() {
               <div className="flex flex-col sm:flex-row gap-3 sm:gap-2 w-full sm:w-auto">
                 {editingCharacter && !editingCharacter.isPublic && (
                     <button
-                        onClick={handlePublishCharacter}
+                        onClick={openPublishConfirmation}
                         disabled={isPublishing}
                         className={`px-5 py-2.5 rounded-lg bg-yellow-500 hover:bg-yellow-600 text-white font-medium shadow-sm transition-colors duration-150 flex items-center justify-center ${isPublishing ? 'opacity-50 cursor-not-allowed' : ''}`}
                         title="キャラクターを公開する"
@@ -2013,6 +2019,21 @@ export default function Home() {
         </div>
       )}
 
+      {/* Publish Character Confirmation Dialog */}
+      {showPublishConfirmationDialog && editingCharacter && (
+        <ConfirmationDialog
+          isOpen={showPublishConfirmationDialog}
+          title="キャラクターの公開"
+          message={`「${editingCharacter.name}」を公開しますか？\n\n公開されたキャラクターは誰でも使用できるようになります。`}
+          onConfirm={executePublishCharacter}
+          onCancel={() => setShowPublishConfirmationDialog(false)}
+          confirmText="公開する"
+          cancelText="キャンセル"
+          confirmButtonColor="blue"
+          isDarkMode={isDarkMode}
+        />
+      )}
+
       {/* Delete Conversation Confirmation Dialog */}
       {showDeleteConversationDialog && conversationToDeleteId && (
         <ConfirmationDialog
@@ -2027,6 +2048,7 @@ export default function Home() {
           }}
           confirmText="削除"
           cancelText="キャンセル"
+          isDarkMode={isDarkMode}
         />
       )}
 
