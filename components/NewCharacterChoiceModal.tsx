@@ -1,4 +1,5 @@
 import { FaPen, FaRobot } from 'react-icons/fa';
+import { Character } from '../lib/types';
 
 interface NewCharacterChoiceModalProps {
   isOpen: boolean;
@@ -6,6 +7,7 @@ interface NewCharacterChoiceModalProps {
   onManualCreate: () => void;
   onQuickCreate: () => void;
   isDarkMode: boolean;
+  baseCharacter?: Character | null;
 }
 
 const NewCharacterChoiceModal = ({
@@ -14,6 +16,7 @@ const NewCharacterChoiceModal = ({
   onManualCreate,
   onQuickCreate,
   isDarkMode,
+  baseCharacter,
 }: NewCharacterChoiceModalProps) => {
   if (!isOpen) return null;
 
@@ -24,9 +27,13 @@ const NewCharacterChoiceModal = ({
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className={`${generalPanelBgColor} ${generalTextColor} p-6 rounded-xl shadow-2xl w-[95vw] sm:max-w-md`}>
         <div className="text-center mb-6">
-          <h3 className="text-2xl font-semibold">新しいキャラクターを作成</h3>
+          <h3 className="text-2xl font-semibold">
+            {baseCharacter ? `「${baseCharacter.name}」をリミックス` : '新しいキャラクターを作成'}
+          </h3>
           <p className={`mt-2 text-sm ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-            どのようにキャラクターを作成しますか？
+            {baseCharacter
+                ? 'このキャラクターをベースにして、新しいキャラクターを作成します。'
+                : 'どのようにキャラクターを作成しますか？'}
           </p>
         </div>
         <div className="space-y-4">
@@ -39,8 +46,10 @@ const NewCharacterChoiceModal = ({
           >
             <FaPen className="mr-3 text-indigo-400" />
             <div>
-              <p className="font-semibold">手動で作成</p>
-              <p className="text-xs text-left opacity-70">すべての設定を自分で細かく調整します。</p>
+              <p className="font-semibold">{baseCharacter ? '手動で編集' : '手動で作成'}</p>
+              <p className="text-xs text-left opacity-70">
+                {baseCharacter ? 'ベースキャラクターの設定を引き継いで編集します。' : 'すべての設定を自分で細かく調整します。'}
+              </p>
             </div>
           </button>
           <button
@@ -52,8 +61,10 @@ const NewCharacterChoiceModal = ({
           >
             <FaRobot className="mr-3 text-pink-400" />
             <div>
-              <p className="font-semibold">AIでクイック作成</p>
-              <p className="text-xs text-left opacity-70">簡単な指示からAIがキャラクターを生成します。</p>
+              <p className="font-semibold">{baseCharacter ? 'AIで編集' : 'AIでクイック作成'}</p>
+              <p className="text-xs text-left opacity-70">
+                {baseCharacter ? 'ベースキャラクターの特徴を保ちつつ、AIがアレンジします。' : '簡単な指示からAIがキャラクターを生成します。'}
+              </p>
             </div>
           </button>
         </div>
