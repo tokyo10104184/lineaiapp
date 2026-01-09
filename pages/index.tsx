@@ -552,7 +552,11 @@ export default function Home() {
 
       } catch (error: any) {
           console.error('Error publishing character:', error);
-          alert(`公開中にエラーが発生しました: ${error.message || error}`);
+          let errorMsg = error.message || error;
+          if (errorMsg.includes('Load failed') || errorMsg.includes('Failed to fetch')) {
+              errorMsg += '\n\n(ヒント: アドブロック等の拡張機能が通信を遮断している可能性があります。一時的に無効化して試してください。)';
+          }
+          alert(`公開中にエラーが発生しました: ${errorMsg}`);
       } finally {
           setIsPublishing(false);
       }
