@@ -463,6 +463,16 @@ export default function Home() {
 
   const handlePublishCharacter = useCallback(async () => {
       if (!editingCharacter) return;
+
+      // Check Supabase Config
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+      if (!supabaseUrl || !supabaseKey || supabaseUrl.includes('placeholder')) {
+          alert('Supabaseの設定が完了していません。\n.env.localファイルを確認し、開発サーバーを再起動してください。');
+          return;
+      }
+
       if (!confirm(`「${editingCharacter.name}」を公開しますか？\n公開されたキャラクターは誰でも使用できるようになります。`)) return;
 
       setIsPublishing(true);

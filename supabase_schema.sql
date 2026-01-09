@@ -40,28 +40,27 @@ CREATE POLICY "Public characters are viewable by everyone"
 ON public_characters FOR SELECT
 USING (true);
 
--- Anyone can insert (since we use anonymous IDs, we allow anyone to post)
+-- Anyone can insert
 CREATE POLICY "Anyone can insert characters"
 ON public_characters FOR INSERT
 WITH CHECK (true);
 
--- Only author can update
-CREATE POLICY "Authors can update their own characters"
-ON public_characters FOR UPDATE
-USING (auth.uid() = author_id) -- Note: Since we are using local UUIDs and not Auth, this RLS might be tricky.
--- For a local-only app without real Auth, we might need to trust the client or use a simplified policy.
--- Given the constraints, we will allow updates if the provided author_id matches (enforced by app logic mostly,
--- but strictly speaking, without a JWT, RLS using auth.uid() won't work for anonymous users unless we use anonymous auth).
--- For this MVP without Supabase Auth, we might have to disable RLS for INSERT/UPDATE or use a shared key,
--- BUT 'auth.uid()' refers to Supabase Auth.
--- Since the requirements state "Authentication... features have been completely removed",
--- we are likely using the Anon Key. The Anon key bypasses RLS if we don't set it up carefully,
--- or we can just leave RLS open for this demo (or use a secret header).
--- Let's stick to "Anyone can insert/update" for now, or rely on client-side ID checks if we can't do real Auth.
--- REVISED POLICY FOR NO-AUTH MODE:
-DROP POLICY IF EXISTS "Authors can update their own characters" ON public_characters;
-CREATE POLICY "Anyone can update characters" ON public_characters FOR UPDATE USING (true);
+-- UPDATES: Restricted to client-side logic in this No-Auth MVP.
+-- Security Note: Since we use anonymous local IDs, RLS cannot securely verify 'author_id' against a JWT.
+-- However, allowing global updates is dangerous.
+-- Ideally, we would use a secret header or Anon Auth.
+-- For this prototype, we will DISABLE updates via the public API to prevent vandalism.
+-- Users can "Remix" (Insert new) but cannot overwrite existing public characters.
+-- If an update feature is strictly required, it should be done via a secure RPC or checking a local secret.
+-- Given the requirements, "Remixing" creates a NEW character. The original should remain immutable to others.
+-- Thus, we REMOVE the "Anyone can update" policy.
+-- Only the author (via some mechanism) should update, but without auth, we default to Immutable Public Characters.
+-- (Or we can allow it if the client sends the correct author_id, but RLS can't verify that easily without a custom header).
+-- Decision: Make public characters INSERT-ONLY (Immutable) for safety in this anonymous env.
+-- Remixing handles the "Edit" use case by creating a fork.
 
+DROP POLICY IF EXISTS "Anyone can update characters" ON public_characters;
+-- No UPDATE policy = Deny All Updates.
 
 -- Favorites Policies
 CREATE POLICY "Favorites are viewable by everyone"
@@ -74,13 +73,14 @@ WITH CHECK (true);
 
 CREATE POLICY "Anyone can delete favorites"
 ON character_favorites FOR DELETE
-USING (true);
+USING (true); -- Ideally restrict to own user_id, but without JWT, we rely on client.
 
--- Storage Policies (SQL for Storage is specific, usually done in UI, but here is the idea)
+-- Storage Policies
 -- Bucket: character-icons
 -- Policy: Give public read access. Give public insert access.
 
 -- RPCs for Favorites Count (Atomic Updates)
+-- These run with SECURITY DEFINER to bypass RLS if needed, or just as normal functions.
 
 CREATE OR REPLACE FUNCTION increment_favorites_count(row_id UUID)
 RETURNS VOID AS $$
