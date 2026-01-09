@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FaHeart, FaRegHeart, FaMagic, FaPlus, FaSortAmountDown, FaSortAmountUp, FaGlobe } from 'react-icons/fa';
+import { FaHeart, FaRegHeart, FaMagic, FaPlus, FaGlobe } from 'react-icons/fa';
 import { supabase } from '../lib/supabase';
 import { getOrCreateAnonymousUserId } from '../lib/utils';
 import { Character } from '../lib/types';
@@ -20,7 +20,6 @@ const PublicCharacterList: React.FC<PublicCharacterListProps> = ({
   const [characters, setCharacters] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [sortBy, setSortBy] = useState<SortOption>('favorites');
-  const [favorites, setFavorites] = useState<Set<string>>(new Set());
   const [userId, setUserId] = useState<string>('');
 
   const generalTextColor = isDarkMode ? 'text-slate-200' : 'text-slate-700';
@@ -32,46 +31,48 @@ const PublicCharacterList: React.FC<PublicCharacterListProps> = ({
   }, []);
 
   useEffect(() => {
-    fetchCharacters();
+    if (userId) {
+        fetchCharacters();
+    }
   }, [sortBy, userId]);
 
   const fetchCharacters = async () => {
     setLoading(true);
     try {
+      // 1. Fetch public characters (all of them)
       let query = supabase
         .from('public_characters')
-        .select(`
-          *,
-          character_favorites (count),
-          user_favorites:character_favorites!left (user_id)
-        `);
+        .select('*');
 
+      // Sorting
       if (sortBy === 'newest') {
         query = query.order('created_at', { ascending: false });
       } else {
-        // Sorting by calculated count is tricky in simple Supabase queries without RPC or Views.
-        // For MVP, we'll fetch then sort client-side if needed, OR just sort by created_at as fallback
-        // if we don't want to make a view.
-        // Actually, let's sort client side for this demo as the dataset is likely small.
-        // But for 'favorites', we might need to rely on the fetched count.
+        query = query.order('favorites_count', { ascending: false });
       }
 
-      const { data, error } = await query;
+      const { data: charactersData, error: charactersError } = await query;
+      if (charactersError) throw charactersError;
 
-      if (error) throw error;
+      // 2. Fetch "my" favorites to check which ones I liked
+      // We do this in a separate query to avoid the inner join behavior of PostgREST
+      // when filtering a joined table, or complex !left syntax issues.
+      let myFavoriteIds = new Set<string>();
+      if (charactersData && charactersData.length > 0) {
+          const { data: favoritesData, error: favoritesError } = await supabase
+            .from('character_favorites')
+            .select('character_id')
+            .eq('user_id', userId);
 
-      let formattedData = data.map((char: any) => ({
+          if (!favoritesError && favoritesData) {
+              favoritesData.forEach((fav: any) => myFavoriteIds.add(fav.character_id));
+          }
+      }
+
+      const formattedData = charactersData.map((char: any) => ({
         ...char,
-        favorites_count: char.character_favorites?.[0]?.count || 0, // This implies we need a robust count query, often easiest with .select('*, favorites:character_favorites(count)') but count is aggressive.
-        // Let's assume we store favorites_count on the table for performance (as per schema)
-        // OR we just use the length of the relation if we selected it.
-        // Actually, my schema had favorites_count on public_characters table. Let's use that.
-        isFavorited: char.user_favorites?.some((fav: any) => fav.user_id === userId),
+        isFavorited: myFavoriteIds.has(char.id),
       }));
-
-      if (sortBy === 'favorites') {
-          formattedData.sort((a: any, b: any) => b.favorites_count - a.favorites_count);
-      }
 
       setCharacters(formattedData);
     } catch (error) {
@@ -90,7 +91,7 @@ const PublicCharacterList: React.FC<PublicCharacterListProps> = ({
             return {
                 ...c,
                 isFavorited: !currentIsFavorited,
-                favorites_count: c.favorites_count + (currentIsFavorited ? -1 : 1)
+                favorites_count: (c.favorites_count || 0) + (currentIsFavorited ? -1 : 1)
             };
         }
         return c;
@@ -103,25 +104,20 @@ const PublicCharacterList: React.FC<PublicCharacterListProps> = ({
           .delete()
           .match({ character_id: charId, user_id: userId });
 
-        // Decrement count on table
-         await supabase.rpc('decrement_favorites_count', { row_id: charId }); // Requires RPC or simple update
-         // Fallback to simple update if RPC not defined (likely not defined in plan)
-         // Actually, let's just ignore the server count update for now or do a raw update
-         // Ideally we use a Database Trigger for accurate counts.
-         // For this task, I'll assume the trigger handles it or we just rely on the client state for now.
+        // Decrement count on table via RPC
+        await supabase.rpc('decrement_favorites_count', { row_id: charId });
 
       } else {
         await supabase
           .from('character_favorites')
           .insert({ character_id: charId, user_id: userId });
 
-        // Increment count on table
-        // await supabase.rpc('increment_favorites_count', { row_id: charId });
+        // Increment count on table via RPC
+        await supabase.rpc('increment_favorites_count', { row_id: charId });
       }
     } catch (error) {
       console.error('Error toggling favorite:', error);
-      // Revert on error
-       fetchCharacters();
+      // Revert on error could be implemented here
     }
   };
 
@@ -203,10 +199,6 @@ const PublicCharacterList: React.FC<PublicCharacterListProps> = ({
               </p>
 
               <div className="flex space-x-2 mt-auto pt-3 border-t dark:border-slate-700 border-slate-100">
-                {/*
-                  Since we don't have a direct "Chat" button requirement in the prompt for this list (implied "Select"),
-                  I'll adding "Download/Chat" button which essentially imports it locally
-                */}
                 <button
                     onClick={() => onSelectCharacter({
                         id: `public-${char.id}`, // Temporary ID
