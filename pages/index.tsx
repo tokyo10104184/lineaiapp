@@ -489,72 +489,26 @@ export default function Home() {
       setIsPublishing(true);
       try {
           const userId = getOrCreateAnonymousUserId();
-          let iconUrl = editingCharacter.icon;
 
-          // 1. Upload Icon if it's a Data URL
-          if (editingCharacter.icon.startsWith('data:')) {
-              try {
-                const fileExt = 'png'; // Assuming png for simplicity with data URLs mostly
-                const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
-                const filePath = `${userId}/${fileName}`;
+          // Use API route to bypass client-side CORS/Network restrictions
+          const response = await fetch('/api/publish', {
+              method: 'POST',
+              headers: {
+                  'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                  character: editingCharacter,
+                  userId: userId,
+              }),
+          });
 
-                // Convert Data URL to Blob
-                const res = await fetch(editingCharacter.icon);
-                const blob = await res.blob();
-
-                const { data, error: uploadError } = await supabase.storage
-                    .from('character-icons')
-                    .upload(filePath, blob);
-
-                if (uploadError) throw new Error(`アイコンのアップロードに失敗しました: ${uploadError.message}`);
-
-                const { data: { publicUrl } } = supabase.storage
-                    .from('character-icons')
-                    .getPublicUrl(filePath);
-
-                iconUrl = publicUrl;
-              } catch (e: any) {
-                console.error('Icon upload error:', e);
-                throw new Error(`アイコン画像の処理中にエラーが発生しました: ${e.message}`);
-              }
+          if (!response.ok) {
+              const errorData = await response.json();
+              throw new Error(errorData.message || `API Error: ${response.status}`);
           }
 
-          // 2. Insert into Supabase (with Retry)
-          let insertedData = null;
-          let insertError = null;
-          const MAX_RETRIES = 3;
-
-          for (let i = 0; i < MAX_RETRIES; i++) {
-            try {
-                const { data, error } = await supabase
-                    .from('public_characters')
-                    .insert([
-                        {
-                            name: editingCharacter.name,
-                            description: editingCharacter.description,
-                            system_prompt: editingCharacter.systemPrompt,
-                            icon_url: iconUrl,
-                            author_id: userId,
-                            parent_id: editingCharacter.parent_id || null, // For remix
-                        }
-                    ])
-                    .select()
-                    .single();
-
-                if (error) throw error;
-                insertedData = data;
-                insertError = null;
-                break; // Success, exit loop
-            } catch (e) {
-                insertError = e;
-                if (i < MAX_RETRIES - 1) {
-                    console.warn(`Insert failed, retrying (${i + 1}/${MAX_RETRIES})...`, e);
-                    await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1))); // Exponential backoff
-                }
-            }
-          }
-
-          if (insertError) throw new Error(`データベースへの保存に失敗しました: ${(insertError as any).message || insertError}`);
+          const result = await response.json();
+          const { character: insertedData, iconUrl } = result;
 
           // 3. Update Local Character
           const updatedLocalChar: Character = {
@@ -573,7 +527,7 @@ export default function Home() {
           console.error('Error publishing character:', error);
           let errorMsg = error.message || error;
           if (errorMsg.includes('Load failed') || errorMsg.includes('Failed to fetch')) {
-              errorMsg += '\n\n(ヒント: アドブロック等の拡張機能が通信を遮断している可能性があります。一時的に無効化して試してください。)';
+               errorMsg += '\n\n(ヒント: アドブロック等の拡張機能が通信を遮断している可能性があります。一時的に無効化して試してください。)';
           }
           alert(`公開中にエラーが発生しました: ${errorMsg}`);
       } finally {
