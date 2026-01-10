@@ -478,53 +478,29 @@ export default function Home() {
       setIsPublishing(true);
       try {
           const userId = getOrCreateAnonymousUserId();
-          let iconUrl = editingCharacter.icon;
 
-          // 1. Upload Icon if it's a Data URL
-          if (editingCharacter.icon.startsWith('data:')) {
-              const fileExt = 'png'; // Assuming png for simplicity with data URLs mostly
-              const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
-              const filePath = `${userId}/${fileName}`;
+          const response = await fetch('/api/publish', {
+              method: 'POST',
+              headers: {
+                  'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                  character: editingCharacter,
+                  userId: userId,
+              }),
+          });
 
-              // Convert Data URL to Blob
-              const res = await fetch(editingCharacter.icon);
-              const blob = await res.blob();
-
-              const { data, error: uploadError } = await supabase.storage
-                  .from('character-icons')
-                  .upload(filePath, blob);
-
-              if (uploadError) throw uploadError;
-
-              const { data: { publicUrl } } = supabase.storage
-                  .from('character-icons')
-                  .getPublicUrl(filePath);
-
-              iconUrl = publicUrl;
+          if (!response.ok) {
+              const errorData = await response.json();
+              throw new Error(errorData.message || 'Failed to publish character');
           }
 
-          // 2. Insert into Supabase
-          const { data: insertedData, error: insertError } = await supabase
-              .from('public_characters')
-              .insert([
-                  {
-                      name: editingCharacter.name,
-                      description: editingCharacter.description,
-                      system_prompt: editingCharacter.systemPrompt,
-                      icon_url: iconUrl,
-                      author_id: userId,
-                      parent_id: editingCharacter.parent_id || null, // For remix
-                  }
-              ])
-              .select()
-              .single();
-
-          if (insertError) throw insertError;
+          const insertedData = await response.json();
 
           // 3. Update Local Character
           const updatedLocalChar: Character = {
               ...editingCharacter,
-              icon: iconUrl, // Update to public URL locally too to save space
+              icon: insertedData.icon_url, // Update to public URL locally too to save space
               isPublic: true,
               public_id: insertedData.id,
               author_id: userId,
