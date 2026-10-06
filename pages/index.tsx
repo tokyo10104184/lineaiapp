@@ -197,6 +197,8 @@ export default function Home() {
         setIsAutoReplying(data.isAutoReplying || false);
         setChatFontSize(data.chatFontSize || 'text-sm');
         setAllowAICustomTextColor(data.allowAICustomTextColor === undefined ? true : data.allowAICustomTextColor);
+        if (data.model) setModel(data.model);
+        if (data.temperature !== undefined) setTemperature(data.temperature);
       } else {
         // Set default settings for a fresh start
         setChatFontSize('text-sm');
@@ -261,13 +263,15 @@ export default function Home() {
         const data = {
           conversations, characters, currentConversationId, currentCharacterId,
           isDarkMode, useCensorship,
-           lineThemeActive, isAutoReplying, // showEmotionIcons removed
+          lineThemeActive, isAutoReplying, // showEmotionIcons removed
           chatFontSize, // Save chat font size
-           allowAICustomTextColor, // Save new setting
+          allowAICustomTextColor, // Save new setting
+          model,
+          temperature,
         };
         localStorage.setItem('chatAppData', JSON.stringify(data));
     }
-  }, [conversations, characters, currentConversationId, currentCharacterId, isDarkMode, useCensorship, lineThemeActive, isAutoReplying, chatFontSize, allowAICustomTextColor]);
+  }, [conversations, characters, currentConversationId, currentCharacterId, isDarkMode, useCensorship, lineThemeActive, isAutoReplying, chatFontSize, allowAICustomTextColor, model, temperature]);
 
   useEffect(() => {
     const sidebarElement = sidebarRef.current;
