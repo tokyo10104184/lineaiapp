@@ -29,9 +29,6 @@ const SWIPE_THRESHOLD = 50;
 const API_MESSAGE_HISTORY_COUNT = 20;
 const MAX_AUTO_REPLY_TURNS = 10;
 
-const MODEL_OPTIONS = {
-    'Mimo-V2-Flash': { value: 'xiaomi/mimo-v2-flash:free', description: 'Xiaomi Mimo-V2-Flashモデル', supportsImage: false },
-};
 const LIGHT_MODE_CHAT_BACKGROUNDS = {
     '青空': '#89C4FA', // Used for LINE theme
     'ペールグレー': '#f1f5f9', // Default light
@@ -294,9 +291,7 @@ export default function Home() {
   const currentConversation = useMemo(() => conversations.find(c => c.id === currentConversationId), [conversations, currentConversationId]);
   const currentCharacterForNormalChat = useMemo(() => characters.find(c => c.id === currentCharacterId), [characters, currentCharacterId]);
 
-  const currentModelSupportsImage = useMemo(() =>
-    MODEL_OPTIONS[Object.keys(MODEL_OPTIONS).find(key => MODEL_OPTIONS[key as keyof typeof MODEL_OPTIONS].value === model) as keyof typeof MODEL_OPTIONS]?.supportsImage ?? false
-  , [model]);
+  const currentModelSupportsImage = useMemo(() => !!model, [model]);
 
   useEffect(() => {
     if (!currentConversationId || !currentConversation || currentConversation.isCharToCharConversation) return;
@@ -1503,7 +1498,6 @@ export default function Home() {
         setAllowAICustomTextColor={setAllowAICustomTextColor}
         chatFontSize={chatFontSize}
         setChatFontSize={setChatFontSize}
-        modelOptions={MODEL_OPTIONS}
       />
 
 
@@ -1913,15 +1907,13 @@ export default function Home() {
                 </div>
                  <div>
                     <label className="block text-sm font-medium mb-1.5">キャラクター1のAIモデル</label>
-                    <select
-                        value={charToCharModels[0] || model}
+                    <input
+                        type="text"
+                        value={charToCharModels[0] ?? model}
                         onChange={(e) => setCharToCharModels(prev => [e.target.value, prev[1]])}
+                        placeholder={model || "例: xiaomi/mimo-v2-flash:free"}
                         className={`w-full p-2.5 border rounded-lg shadow-sm ${generalInputFieldBgColor} ${generalTextColor} ${generalBorderColor} focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors`}
-                    >
-                        {Object.entries(MODEL_OPTIONS).map(([label, info]) => (
-                            <option key={info.value} value={info.value}>{label}</option>
-                        ))}
-                    </select>
+                    />
                 </div>
                 <div>
                     <label className="block text-sm font-medium mb-1.5">キャラクター2</label>
@@ -1940,15 +1932,13 @@ export default function Home() {
                 </div>
                 <div>
                     <label className="block text-sm font-medium mb-1.5">キャラクター2のAIモデル</label>
-                    <select
-                        value={charToCharModels[1] || model}
+                    <input
+                        type="text"
+                        value={charToCharModels[1] ?? model}
                         onChange={(e) => setCharToCharModels(prev => [prev[0], e.target.value])}
+                        placeholder={model || "例: xiaomi/mimo-v2-flash:free"}
                         className={`w-full p-2.5 border rounded-lg shadow-sm ${generalInputFieldBgColor} ${generalTextColor} ${generalBorderColor} focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors`}
-                    >
-                        {Object.entries(MODEL_OPTIONS).map(([label, info]) => (
-                            <option key={info.value} value={info.value}>{label}</option>
-                        ))}
-                    </select>
+                    />
                 </div>
 
                 <div>
