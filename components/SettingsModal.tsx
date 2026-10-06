@@ -17,7 +17,7 @@ interface SettingsModalProps {
   setAllowAICustomTextColor: (allowAICustomTextColor: boolean) => void;
   chatFontSize: string;
   setChatFontSize: (chatFontSize: string) => void;
-  modelOptions: any;
+  modelOptions?: any;
 }
 
 const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -36,7 +36,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   setAllowAICustomTextColor,
   chatFontSize,
   setChatFontSize,
-  modelOptions,
 }) => {
 
   if (!isOpen) return null;
@@ -88,10 +87,14 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
           <SettingSection title="AI設定">
             <div>
               <label className={`block text-sm font-medium mb-1.5`}>AIモデル</label>
-              <select className={`w-full px-3 py-2.5 border rounded-lg text-sm shadow-sm ${inputBgColor} ${textColor} ${borderColor} focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors`} value={model} onChange={(e) => setModel(e.target.value)}>
-                {Object.entries(modelOptions).map(([label, info]: [string, any]) => ( <option key={info.value} value={info.value}> {label} </option> ))}
-              </select>
-              <div className={`text-xs mt-1.5 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}> {Object.entries(modelOptions).find(([_, info]: [string, any]) => info.value === model)?.[1]?.description} </div>
+              <input
+                type="text"
+                className={`w-full px-3 py-2.5 border rounded-lg text-sm shadow-sm ${inputBgColor} ${textColor} ${borderColor} focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors`}
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                placeholder="例: xiaomi/mimo-v2-flash:free"
+              />
+              <div className={`text-xs mt-1.5 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}> OpenRouterなどのモデルIDを直接入力してください。 </div>
             </div>
             <div>
               <div className="flex items-center justify-between mb-1.5">
