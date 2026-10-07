@@ -30,6 +30,34 @@ interface SettingsModalProps {
   modelOptions?: any;
 }
 
+const SettingSection: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
+  <div className="space-y-4">
+    <h3 className="text-lg font-semibold text-indigo-400 mb-3">{title}</h3>
+    <div className="space-y-5 pl-2">{children}</div>
+  </div>
+);
+
+const ToggleSwitch: React.FC<{ label: string; description: string; enabled: boolean; onToggle: () => void; }> = ({ label, description, enabled, onToggle }) => (
+  <div className="flex items-center justify-between">
+    <div>
+      <label className="text-sm font-medium">{label}</label>
+      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{description}</p>
+    </div>
+    <div
+      onClick={onToggle}
+      className={`relative inline-flex items-center h-6 rounded-full w-11 cursor-pointer transition-colors duration-300 ease-in-out ${
+        enabled ? 'bg-indigo-500' : 'bg-slate-400 dark:bg-slate-600'
+      }`}
+    >
+      <span
+        className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ease-in-out duration-200 ${
+          enabled ? 'translate-x-6' : 'translate-x-1'
+        }`}
+      />
+    </div>
+  </div>
+);
+
 const SettingsModal: React.FC<SettingsModalProps> = ({
   isOpen,
   onClose,
@@ -64,34 +92,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   const textColor = isDarkMode ? 'text-slate-200' : 'text-slate-700';
   const inputBgColor = isDarkMode ? 'bg-slate-700' : 'bg-slate-100';
   const borderColor = isDarkMode ? 'border-slate-600' : 'border-slate-300';
-
-  const SettingSection: React.FC<{ title: string, children: React.ReactNode }> = ({ title, children }) => (
-    <div className="space-y-4">
-      <h3 className="text-lg font-semibold text-indigo-400 mb-3">{title}</h3>
-      <div className="space-y-5 pl-2">{children}</div>
-    </div>
-  );
-
-  const ToggleSwitch: React.FC<{ label: string; description: string; enabled: boolean; onToggle: () => void; }> = ({ label, description, enabled, onToggle }) => (
-    <div className="flex items-center justify-between">
-      <div>
-        <label className="text-sm font-medium">{label}</label>
-        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{description}</p>
-      </div>
-      <div
-        onClick={onToggle}
-        className={`relative inline-flex items-center h-6 rounded-full w-11 cursor-pointer transition-colors duration-300 ease-in-out ${
-          enabled ? 'bg-indigo-500' : 'bg-slate-400 dark:bg-slate-600'
-        }`}
-      >
-        <span
-          className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ease-in-out duration-200 ${
-            enabled ? 'translate-x-6' : 'translate-x-1'
-          }`}
-        />
-      </div>
-    </div>
-  );
 
 
   return (
