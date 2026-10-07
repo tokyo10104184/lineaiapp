@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Message, Character } from '../lib/types';
+import { Message, Character, ChutesApiRequestBody } from '../lib/types';
 import { Button } from './ui/button';
 import { Textarea } from './ui/textarea';
 import { FaMagic, FaCheck, FaUndo, FaTimes } from 'react-icons/fa';
@@ -18,6 +18,15 @@ interface AIMessageEditModalProps {
 }
 
 type EditState = 'idle' | 'loading' | 'proposal' | 'error';
+
+const EDIT_MESSAGE_SYSTEM_PROMPT = `You are an AI assistant that rewrites AI-generated chat messages according to the user's specific instructions.
+Your goal is to modify the provided message while preserving the character's persona and tone.
+
+Rules:
+1. Output ONLY the rewritten message text.
+2. Do NOT add any extra commentary, explanations, greetings, or preambles (e.g. do NOT say "Here is the rewritten text:").
+3. Preserve the original language (Japanese unless instructed otherwise).
+4. Clean any internal thinking tags if present.`;
 
 const AIMessageEditModal: React.FC<AIMessageEditModalProps> = ({
   isOpen,
@@ -44,19 +53,39 @@ const AIMessageEditModal: React.FC<AIMessageEditModalProps> = ({
     setError('');
 
     try {
-      const response = await fetch('/api/ai-edit-message', {
+      const messagesPayload: Array<{ role: string; content: string }> = [
+        { role: 'system', content: EDIT_MESSAGE_SYSTEM_PROMPT },
+      ];
+
+      if (character?.systemPrompt) {
+        messagesPayload.push({ role: 'system', content: character.systemPrompt });
+      }
+
+      const promptUserContent = `元メッセージ:
+${message.text || '（画像メッセージ）'}
+
+ユーザーからの編集指示:
+${instruction}
+
+(指示に従って元メッセージを作り替え、修正後のメッセージ本文のみを日本語で返答してください。)`;
+
+      messagesPayload.push({ role: 'user', content: promptUserContent });
+
+      const apiRequestBody: ChutesApiRequestBody = {
+        model,
+        messages: messagesPayload,
+        temperature: 0.7,
+        useCensorship: false,
+        provider,
+        apiKey,
+        cloudflareAccountId,
+        stream: false,
+      };
+
+      const response = await fetch('/api/chutes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          currentText: message.text,
-          instruction,
-          characterName: character?.name,
-          systemPrompt: character?.systemPrompt,
-          model,
-          provider,
-          apiKey,
-          cloudflareAccountId,
-        }),
+        body: JSON.stringify(apiRequestBody),
       });
 
       if (!response.ok) {
@@ -72,7 +101,15 @@ const AIMessageEditModal: React.FC<AIMessageEditModalProps> = ({
       }
 
       const data = await response.json();
-      setProposedText(data.editedText || '');
+      let replyText = data.reply || '';
+
+      // Clean thinking tags or codeblocks
+      replyText = replyText.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+      if (replyText.startsWith('```')) {
+        replyText = replyText.replace(/^```(?:[a-zA-Z]+)?\n?/, '').replace(/\n?```$/, '').trim();
+      }
+
+      setProposedText(replyText);
       setEditState('proposal');
     } catch (err: any) {
       setError(err.message || 'エラーが発生しました。');
