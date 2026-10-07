@@ -115,6 +115,7 @@ export default function Home() {
   const [isDarkMode, setIsDarkMode] = useState(false)
   const [isSending, setIsSending] = useState(false)
   const [useCensorship, setUseCensorship] = useState(false)
+  const [streamResponse, setStreamResponse] = useState(true)
   const [newCharacter, setNewCharacter] = useState<Partial<Character>>({
     name: '', description: '', systemPrompt: '',
     icon: PLACEHOLDER_ICON, isPublic: false,
@@ -221,6 +222,7 @@ export default function Home() {
         setCurrentCharacterId(data.currentCharacterId || '');
         setIsDarkMode(data.isDarkMode || false);
         setUseCensorship(data.useCensorship || false);
+        if (data.streamResponse !== undefined) setStreamResponse(data.streamResponse);
         setLineThemeActive(data.lineThemeActive || false);
         setIsAutoReplying(data.isAutoReplying || false);
         setChatFontSize(data.chatFontSize || 'text-sm');
@@ -305,7 +307,7 @@ export default function Home() {
     if (conversations.length > 0 || characters.length > 0 || currentConversationId || currentCharacterId) {
         const data = {
           conversations, characters, currentConversationId, currentCharacterId,
-          isDarkMode, useCensorship,
+          isDarkMode, useCensorship, streamResponse,
           lineThemeActive, isAutoReplying, // showEmotionIcons removed
           chatFontSize, // Save chat font size
           allowAICustomTextColor, // Save new setting
@@ -323,7 +325,7 @@ export default function Home() {
         };
         localStorage.setItem('chatAppData', JSON.stringify(data));
     }
-  }, [conversations, characters, currentConversationId, currentCharacterId, isDarkMode, useCensorship, lineThemeActive, isAutoReplying, chatFontSize, allowAICustomTextColor, provider, geminiApiKey, groqApiKey, cloudflareApiKey, cloudflareAccountId, openRouterModel, geminiModel, groqModel, cloudflareModel, model, temperature]);
+  }, [conversations, characters, currentConversationId, currentCharacterId, isDarkMode, useCensorship, streamResponse, lineThemeActive, isAutoReplying, chatFontSize, allowAICustomTextColor, provider, geminiApiKey, groqApiKey, cloudflareApiKey, cloudflareAccountId, openRouterModel, geminiModel, groqModel, cloudflareModel, model, temperature]);
 
   useEffect(() => {
     const sidebarElement = sidebarRef.current;
@@ -845,30 +847,93 @@ export default function Home() {
             messagesPayload.push({ role: 'system', content: FORMATTING_INSTRUCTIONS_PROMPT });
             messagesPayload.push({ role: 'system', content: systemPrompt });
             messagesPayload.push(...historyForApi);
-            const apiRequestBody: ChutesApiRequestBody = { model, messages: messagesPayload, temperature, useCensorship, provider, apiKey: activeApiKey, cloudflareAccountId: provider === 'cloudflare' ? cloudflareAccountId : undefined };
+            const apiRequestBody: ChutesApiRequestBody = { model, messages: messagesPayload, temperature, useCensorship, provider, apiKey: activeApiKey, cloudflareAccountId: provider === 'cloudflare' ? cloudflareAccountId : undefined, stream: streamResponse };
             if (isImageMessage && localImageDataUrl && currentModelSupportsImage && !editedMessageId) {
                 apiRequestBody.imageDataUrl = localImageDataUrl;
             }
 
-            const response = await fetch('/api/chutes', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(apiRequestBody)
-            });
+            if (streamResponse) {
+                const response = await fetch('/api/chutes', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(apiRequestBody)
+                });
 
-            if (!response.ok) { const errorData = await response.text(); throw new Error(`HTTP error! status: ${response.status}, message: ${errorData}`); }
-            const data = await response.json();
-            let rawReply = data.reply || 'エラーが発生しました。応答がありません。';
+                if (!response.ok) { const errorData = await response.text(); throw new Error(`HTTP error! status: ${response.status}, message: ${errorData}`); }
+                if (!response.body) { throw new Error('No response body'); }
 
-            const finalReplyText = cleanAIReply(rawReply);
+                const aiMessageId = `${Date.now()}-ai`;
+                const aiMessage: Message = {
+                    id: aiMessageId,
+                    sender: currentCharacterForNormalChat.id,
+                    text: '', timestamp: new Date(), isRead: false
+                };
+                setConversations(prev => prev.map(conv =>
+                    conv.id === currentConversationId ? { ...conv, messages: [...conv.messages, aiMessage] } : conv
+                ));
 
-            const aiMessage: Message = {
-                id: `${Date.now()}-ai`,
-                sender: currentCharacterForNormalChat.id,
-                text: finalReplyText, timestamp: new Date(), isRead: false
-            };
-            setConversations(prev => prev.map(conv =>
-                conv.id === currentConversationId ? { ...conv, messages: [...conv.messages, aiMessage] } : conv
-            ));
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let accumulatedReply = '';
+                let buffer = '';
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop() || '';
+
+                    for (const line of lines) {
+                        const trimmed = line.trim();
+                        if (!trimmed || !trimmed.startsWith('data:')) continue;
+                        const dataStr = trimmed.replace(/^data:\s*/, '');
+                        if (dataStr === '[DONE]') continue;
+                        try {
+                            const parsed = JSON.parse(dataStr);
+                            const content = parsed.choices?.[0]?.delta?.content || parsed.choices?.[0]?.text || parsed.result?.response || '';
+                            if (content) {
+                                accumulatedReply += content;
+                                const cleaned = cleanAIReply(accumulatedReply);
+                                setConversations(prev => prev.map(conv => {
+                                    if (conv.id !== currentConversationId) return conv;
+                                    return {
+                                        ...conv,
+                                        messages: conv.messages.map(m => m.id === aiMessageId ? { ...m, text: cleaned } : m)
+                                    };
+                                }));
+                            }
+                        } catch (e) {}
+                    }
+                }
+                const finalReplyText = cleanAIReply(accumulatedReply);
+                setConversations(prev => prev.map(conv => {
+                    if (conv.id !== currentConversationId) return conv;
+                    return {
+                        ...conv,
+                        messages: conv.messages.map(m => m.id === aiMessageId ? { ...m, text: finalReplyText } : m)
+                    };
+                }));
+            } else {
+                const response = await fetch('/api/chutes', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(apiRequestBody)
+                });
+
+                if (!response.ok) { const errorData = await response.text(); throw new Error(`HTTP error! status: ${response.status}, message: ${errorData}`); }
+                const data = await response.json();
+                let rawReply = data.reply || 'エラーが発生しました。応答がありません。';
+
+                const finalReplyText = cleanAIReply(rawReply);
+
+                const aiMessage: Message = {
+                    id: `${Date.now()}-ai`,
+                    sender: currentCharacterForNormalChat.id,
+                    text: finalReplyText, timestamp: new Date(), isRead: false
+                };
+                setConversations(prev => prev.map(conv =>
+                    conv.id === currentConversationId ? { ...conv, messages: [...conv.messages, aiMessage] } : conv
+                ));
+            }
         }
     } catch (error) {
         console.error('Overall sendMessage Error:', error);
@@ -893,7 +958,7 @@ export default function Home() {
     } finally {
         setIsSending(false);
     }
-  }, [input, imageToSend, currentConversationId, currentCharacterForNormalChat, currentModelSupportsImage, isSending, model, temperature, useCensorship, conversations, currentConversation, characters, provider, activeApiKey, cloudflareAccountId]);
+  }, [input, imageToSend, currentConversationId, currentCharacterForNormalChat, currentModelSupportsImage, isSending, model, temperature, useCensorship, streamResponse, conversations, currentConversation, characters, provider, activeApiKey, cloudflareAccountId]);
 
 
   const sendQuickMessage = useCallback((text: string) => {
@@ -1422,20 +1487,73 @@ export default function Home() {
       messagesPayload.push({ role: 'system', content: currentCharacterForNormalChat.systemPrompt });
       messagesPayload.push(...historyForApi, continuationPrompt);
 
-      const apiRequestBody: ChutesApiRequestBody = { model, messages: messagesPayload, temperature, useCensorship, provider, apiKey: activeApiKey, cloudflareAccountId: provider === 'cloudflare' ? cloudflareAccountId : undefined };
-      const response = await fetch('/api/chutes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(apiRequestBody) });
-      if (!response.ok) { const errorData = await response.text(); throw new Error(`HTTP error! status: ${response.status}, message: ${errorData}`); }
-      const data = await response.json();
-      let rawReply = data.reply || 'エラーが発生しました。応答がありません。';
-      const finalReplyText = cleanAIReply(rawReply);
-      const aiMessage: Message = { id: `${Date.now()}-ai-continue`, sender: currentCharacterForNormalChat.id, text: finalReplyText, timestamp: new Date(), isRead: false };
-      setConversations(prev => prev.map(conv => conv.id === currentConversationId ? { ...conv, messages: [...conv.messages, aiMessage] } : conv));
+      const apiRequestBody: ChutesApiRequestBody = { model, messages: messagesPayload, temperature, useCensorship, provider, apiKey: activeApiKey, cloudflareAccountId: provider === 'cloudflare' ? cloudflareAccountId : undefined, stream: streamResponse };
+      if (streamResponse) {
+          const response = await fetch('/api/chutes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(apiRequestBody) });
+          if (!response.ok) { const errorData = await response.text(); throw new Error(`HTTP error! status: ${response.status}, message: ${errorData}`); }
+          if (!response.body) { throw new Error('No response body'); }
+
+          const aiMessageId = `${Date.now()}-ai-continue`;
+          const aiMessage: Message = { id: aiMessageId, sender: currentCharacterForNormalChat.id, text: '', timestamp: new Date(), isRead: false };
+          setConversations(prev => prev.map(conv => conv.id === currentConversationId ? { ...conv, messages: [...conv.messages, aiMessage] } : conv));
+
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          let accumulatedReply = '';
+          let buffer = '';
+
+          while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              buffer += decoder.decode(value, { stream: true });
+              const lines = buffer.split('\n');
+              buffer = lines.pop() || '';
+
+              for (const line of lines) {
+                  const trimmed = line.trim();
+                  if (!trimmed || !trimmed.startsWith('data:')) continue;
+                  const dataStr = trimmed.replace(/^data:\s*/, '');
+                  if (dataStr === '[DONE]') continue;
+                  try {
+                      const parsed = JSON.parse(dataStr);
+                      const content = parsed.choices?.[0]?.delta?.content || parsed.choices?.[0]?.text || parsed.result?.response || '';
+                      if (content) {
+                          accumulatedReply += content;
+                          const cleaned = cleanAIReply(accumulatedReply);
+                          setConversations(prev => prev.map(conv => {
+                              if (conv.id !== currentConversationId) return conv;
+                              return {
+                                  ...conv,
+                                  messages: conv.messages.map(m => m.id === aiMessageId ? { ...m, text: cleaned } : m)
+                              };
+                          }));
+                      }
+                  } catch (e) {}
+              }
+          }
+          const finalReplyText = cleanAIReply(accumulatedReply);
+          setConversations(prev => prev.map(conv => {
+              if (conv.id !== currentConversationId) return conv;
+              return {
+                  ...conv,
+                  messages: conv.messages.map(m => m.id === aiMessageId ? { ...m, text: finalReplyText } : m)
+              };
+          }));
+      } else {
+          const response = await fetch('/api/chutes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(apiRequestBody) });
+          if (!response.ok) { const errorData = await response.text(); throw new Error(`HTTP error! status: ${response.status}, message: ${errorData}`); }
+          const data = await response.json();
+          let rawReply = data.reply || 'エラーが発生しました。応答がありません。';
+          const finalReplyText = cleanAIReply(rawReply);
+          const aiMessage: Message = { id: `${Date.now()}-ai-continue`, sender: currentCharacterForNormalChat.id, text: finalReplyText, timestamp: new Date(), isRead: false };
+          setConversations(prev => prev.map(conv => conv.id === currentConversationId ? { ...conv, messages: [...conv.messages, aiMessage] } : conv));
+      }
     } catch (error) {
         console.error('handleContinueConversation Error:', error);
         const errorMessage: Message = { id: `${Date.now()}-error-continue`, sender: currentCharacterForNormalChat.id, text: '連続応答の生成中にエラーが発生しました。', timestamp: new Date() };
         setConversations(prev => prev.map(conv => conv.id === currentConversationId ? { ...conv, messages: [...conv.messages, errorMessage] } : conv));
     } finally { setIsSending(false); }
-  }, [currentConversation, currentCharacterForNormalChat, isSending, model, temperature, useCensorship, conversations, currentConversationId, provider, activeApiKey, cloudflareAccountId]);
+  }, [currentConversation, currentCharacterForNormalChat, isSending, model, temperature, useCensorship, streamResponse, conversations, currentConversationId, provider, activeApiKey, cloudflareAccountId]);
 
   const handleRetry = useCallback(async (aiMessageId: string) => {
     if (!currentConversation || isSending) return;
@@ -1561,6 +1679,8 @@ export default function Home() {
         setTemperature={setTemperature}
         useCensorship={useCensorship}
         setUseCensorship={setUseCensorship}
+        streamResponse={streamResponse}
+        setStreamResponse={setStreamResponse}
         lineThemeActive={lineThemeActive}
         setLineThemeActive={setLineThemeActive}
         allowAICustomTextColor={allowAICustomTextColor}
