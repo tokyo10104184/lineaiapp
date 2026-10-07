@@ -56,4 +56,5 @@ export interface ChutesApiRequestBody {
   provider?: 'openrouter' | 'gemini' | 'groq' | 'cloudflare';
   apiKey?: string;
   cloudflareAccountId?: string;
+  stream?: boolean;
 }

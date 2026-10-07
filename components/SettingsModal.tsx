@@ -21,6 +21,8 @@ interface SettingsModalProps {
   setTemperature: (temperature: number) => void;
   useCensorship: boolean;
   setUseCensorship: (useCensorship: boolean) => void;
+  streamResponse?: boolean;
+  setStreamResponse?: (streamResponse: boolean) => void;
   lineThemeActive: boolean;
   setLineThemeActive: (lineThemeActive: boolean) => void;
   allowAICustomTextColor: boolean;
@@ -78,6 +80,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   setTemperature,
   useCensorship,
   setUseCensorship,
+  streamResponse = true,
+  setStreamResponse,
   lineThemeActive,
   setLineThemeActive,
   allowAICustomTextColor,
@@ -261,6 +265,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
               description="AIの応答に検閲を適用します。"
               enabled={useCensorship}
               onToggle={() => setUseCensorship(!useCensorship)}
+            />
+            <ToggleSwitch
+              label="ストリーミング応答"
+              description="AIの返答をリアルタイムに流し込み表示します。"
+              enabled={streamResponse}
+              onToggle={() => setStreamResponse && setStreamResponse(!streamResponse)}
             />
           </SettingSection>
 
