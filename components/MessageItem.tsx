@@ -148,11 +148,11 @@ const MessageItem = React.memo(({
             <div className={bubbleClass}>
               {msg.imageUrl && (<img src={msg.imageUrl} alt="送信された画像" className="max-w-full max-h-60 rounded-lg mb-2 cursor-pointer shadow-sm" onClick={() => window.open(msg.imageUrl, '_blank')} />)}
               {msg.text &&
-                <span
-                  className={`whitespace-pre-wrap ${messageTextColorClass} ${currentChatFontSize}`}
+                <div
+                  className={`${messageTextColorClass} ${currentChatFontSize}`}
                 >
                   {renderFormattedText(msg.text, allowAICustomTextColor && !lineThemeActive)}
-                </span>
+                </div>
               }
               {!msg.text && msg.imageUrl && <span className={`${messageTextColorClass} italic text-xs`}>画像</span>}
             </div>
