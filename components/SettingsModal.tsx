@@ -5,10 +5,16 @@ interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
   isDarkMode: boolean;
-  provider?: 'openrouter' | 'gemini';
-  setProvider?: (provider: 'openrouter' | 'gemini') => void;
+  provider?: 'openrouter' | 'gemini' | 'groq' | 'cloudflare';
+  setProvider?: (provider: 'openrouter' | 'gemini' | 'groq' | 'cloudflare') => void;
   geminiApiKey?: string;
   setGeminiApiKey?: (key: string) => void;
+  groqApiKey?: string;
+  setGroqApiKey?: (key: string) => void;
+  cloudflareApiKey?: string;
+  setCloudflareApiKey?: (key: string) => void;
+  cloudflareAccountId?: string;
+  setCloudflareAccountId?: (id: string) => void;
   model: string;
   setModel: (model: string) => void;
   temperature: number;
@@ -32,6 +38,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   setProvider,
   geminiApiKey = '',
   setGeminiApiKey,
+  groqApiKey = '',
+  setGroqApiKey,
+  cloudflareApiKey = '',
+  setCloudflareApiKey,
+  cloudflareAccountId = '',
+  setCloudflareAccountId,
   model,
   setModel,
   temperature,
@@ -122,6 +134,32 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 >
                   Gemini
                 </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (setProvider) setProvider('groq');
+                  }}
+                  className={`py-2 px-3 text-sm font-medium rounded-lg border transition-colors ${
+                    provider === 'groq'
+                      ? 'bg-indigo-600 text-white border-indigo-600'
+                      : `${inputBgColor} ${textColor} ${borderColor}`
+                  }`}
+                >
+                  Groq
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (setProvider) setProvider('cloudflare');
+                  }}
+                  className={`py-2 px-3 text-sm font-medium rounded-lg border transition-colors ${
+                    provider === 'cloudflare'
+                      ? 'bg-indigo-600 text-white border-indigo-600'
+                      : `${inputBgColor} ${textColor} ${borderColor}`
+                  }`}
+                >
+                  Cloudflare
+                </button>
               </div>
             </div>
             {provider === 'gemini' && (
@@ -139,6 +177,51 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
               </div>
             )}
+            {provider === 'groq' && (
+              <div>
+                <label className="block text-sm font-medium mb-1.5">Groq APIキー</label>
+                <input
+                  type="password"
+                  className={`w-full px-3 py-2.5 border rounded-lg text-sm shadow-sm ${inputBgColor} ${textColor} ${borderColor} focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors`}
+                  value={groqApiKey}
+                  onChange={(e) => setGroqApiKey && setGroqApiKey(e.target.value)}
+                  placeholder="gsk_..."
+                />
+                <div className={`text-xs mt-1.5 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                  Groq Console (console.groq.com) で取得したAPIキーを入力してください。ブラウザに保存されます。
+                </div>
+              </div>
+            )}
+            {provider === 'cloudflare' && (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1.5">Cloudflare APIトークン</label>
+                  <input
+                    type="password"
+                    className={`w-full px-3 py-2.5 border rounded-lg text-sm shadow-sm ${inputBgColor} ${textColor} ${borderColor} focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors`}
+                    value={cloudflareApiKey}
+                    onChange={(e) => setCloudflareApiKey && setCloudflareApiKey(e.target.value)}
+                    placeholder="APIトークンを入力..."
+                  />
+                  <div className={`text-xs mt-1.5 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                    Cloudflareダッシュボードで発行したWorkers AIアクセス用APIトークンを入力してください。
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1.5">Cloudflare Account ID</label>
+                  <input
+                    type="text"
+                    className={`w-full px-3 py-2.5 border rounded-lg text-sm shadow-sm ${inputBgColor} ${textColor} ${borderColor} focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors`}
+                    value={cloudflareAccountId}
+                    onChange={(e) => setCloudflareAccountId && setCloudflareAccountId(e.target.value)}
+                    placeholder="アカウントID (32桁の16進数)"
+                  />
+                  <div className={`text-xs mt-1.5 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                    CloudflareダッシュボードのURLまたは右サイドバーにあるAccount IDを入力してください。
+                  </div>
+                </div>
+              </div>
+            )}
             <div>
               <label className={`block text-sm font-medium mb-1.5`}>AIモデル</label>
               <input
@@ -146,11 +229,23 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 className={`w-full px-3 py-2.5 border rounded-lg text-sm shadow-sm ${inputBgColor} ${textColor} ${borderColor} focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors`}
                 value={model}
                 onChange={(e) => setModel(e.target.value)}
-                placeholder={provider === 'gemini' ? "例: gemini-2.5-flash" : "例: xiaomi/mimo-v2-flash:free"}
+                placeholder={
+                  provider === 'gemini'
+                    ? "例: gemini-2.5-flash"
+                    : provider === 'groq'
+                    ? "例: llama-3.3-70b-versatile"
+                    : provider === 'cloudflare'
+                    ? "例: @cf/meta/llama-3.1-8b-instruct"
+                    : "例: xiaomi/mimo-v2-flash:free"
+                }
               />
               <div className={`text-xs mt-1.5 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
                 {provider === 'gemini'
                   ? 'Geminiのモデル名を入力してください (例: gemini-2.5-flash, gemini-1.5-flash)'
+                  : provider === 'groq'
+                  ? 'Groqのモデル名を入力してください (例: llama-3.3-70b-versatile, llama-3.1-8b-instant)'
+                  : provider === 'cloudflare'
+                  ? 'Cloudflare Workers AIのモデル名を入力してください (例: @cf/meta/llama-3.1-8b-instruct)'
                   : 'OpenRouterなどのモデルIDを直接入力してください。'}
               </div>
             </div>
