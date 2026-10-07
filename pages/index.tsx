@@ -1589,6 +1589,9 @@ export default function Home() {
         onApplyProposal={(proposal) => setEditingCharacter(proposal)}
         isDarkMode={isDarkMode}
         model={model}
+        provider={provider}
+        apiKey={activeApiKey}
+        cloudflareAccountId={cloudflareAccountId}
       />}
 
       <NewCharacterChoiceModal
