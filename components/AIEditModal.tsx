@@ -11,11 +11,24 @@ interface AIEditModalProps {
   onApplyProposal: (proposedCharacter: Character) => void;
   isDarkMode: boolean;
   model: string;
+  provider?: string;
+  apiKey?: string;
+  cloudflareAccountId?: string;
 }
 
 type EditState = 'idle' | 'loading' | 'proposal' | 'error';
 
-const AIEditModal: React.FC<AIEditModalProps> = ({ isOpen, onClose, character, onApplyProposal, isDarkMode, model }) => {
+const AIEditModal: React.FC<AIEditModalProps> = ({
+  isOpen,
+  onClose,
+  character,
+  onApplyProposal,
+  isDarkMode,
+  model,
+  provider,
+  apiKey,
+  cloudflareAccountId,
+}) => {
   const [instruction, setInstruction] = useState('');
   const [proposal, setProposal] = useState<Character | null>(null);
   const [editState, setEditState] = useState<EditState>('idle');
@@ -29,17 +42,24 @@ const AIEditModal: React.FC<AIEditModalProps> = ({ isOpen, onClose, character, o
       const response = await fetch('/api/ai-edit-character', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ character, instruction, model }),
+        body: JSON.stringify({ character, instruction, model, provider, apiKey, cloudflareAccountId }),
       });
       if (!response.ok) {
-        const errData = await response.json();
-        throw new Error(errData.error || 'Failed to generate proposal.');
+        let errMessage = 'Failed to generate proposal.';
+        try {
+          const errData = await response.json();
+          errMessage = errData.error || errMessage;
+        } catch {
+          const text = await response.text();
+          errMessage = text || errMessage;
+        }
+        throw new Error(errMessage);
       }
       const proposedCharacter = await response.json();
       setProposal(proposedCharacter);
       setEditState('proposal');
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || 'エラーが発生しました。');
       setEditState('error');
     }
   };
@@ -67,8 +87,8 @@ const AIEditModal: React.FC<AIEditModalProps> = ({ isOpen, onClose, character, o
   if (!isOpen) return null;
 
   const renderDiff = (original: any, changed: any) => {
-    if (!original) return null; // GUARD CLAUSE for the crash
-    return Object.keys(original).map(key => {
+    if (!original) return null;
+    const diffs = Object.keys(original).map(key => {
       if (key === 'name' || key === 'description' || key === 'systemPrompt') {
         const originalValue = original[key as keyof Character];
         const changedValue = changed[key as keyof Character];
@@ -84,6 +104,14 @@ const AIEditModal: React.FC<AIEditModalProps> = ({ isOpen, onClose, character, o
       }
       return null;
     }).filter(Boolean);
+
+    if (diffs.length === 0) {
+      return (
+        <p className="text-sm opacity-80">変更箇所はありませんでした。</p>
+      );
+    }
+
+    return diffs;
   };
 
   return (
