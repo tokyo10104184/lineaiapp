@@ -7,6 +7,8 @@ interface SettingsModalProps {
   isDarkMode: boolean;
   provider?: 'openrouter' | 'gemini';
   setProvider?: (provider: 'openrouter' | 'gemini') => void;
+  geminiApiKey?: string;
+  setGeminiApiKey?: (key: string) => void;
   model: string;
   setModel: (model: string) => void;
   temperature: number;
@@ -28,6 +30,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   isDarkMode,
   provider = 'openrouter',
   setProvider,
+  geminiApiKey = '',
+  setGeminiApiKey,
   model,
   setModel,
   temperature,
@@ -126,6 +130,21 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 </button>
               </div>
             </div>
+            {provider === 'gemini' && (
+              <div>
+                <label className="block text-sm font-medium mb-1.5">Gemini APIキー</label>
+                <input
+                  type="password"
+                  className={`w-full px-3 py-2.5 border rounded-lg text-sm shadow-sm ${inputBgColor} ${textColor} ${borderColor} focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors`}
+                  value={geminiApiKey}
+                  onChange={(e) => setGeminiApiKey && setGeminiApiKey(e.target.value)}
+                  placeholder="AIzaSy..."
+                />
+                <div className={`text-xs mt-1.5 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                  Google AI Studioで取得したGemini APIキーを入力してください。ブラウザに保存されます。
+                </div>
+              </div>
+            )}
             <div>
               <label className={`block text-sm font-medium mb-1.5`}>AIモデル</label>
               <input

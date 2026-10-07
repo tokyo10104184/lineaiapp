@@ -54,4 +54,5 @@ export interface ChutesApiRequestBody {
   useCensorship: boolean;
   imageDataUrl?: string;
   provider?: 'openrouter' | 'gemini';
+  apiKey?: string;
 }

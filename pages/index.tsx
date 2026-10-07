@@ -75,6 +75,7 @@ export default function Home() {
   const [currentConversationId, setCurrentConversationId] = useState<string>('')
   const [input, setInput] = useState('')
   const [provider, setProvider] = useState<'openrouter' | 'gemini'>('openrouter')
+  const [geminiApiKey, setGeminiApiKey] = useState('')
   const [model, setModel] = useState('xiaomi/mimo-v2-flash:free')
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [temperature, setTemperature] = useState(0.7)
@@ -198,6 +199,7 @@ export default function Home() {
         setChatFontSize(data.chatFontSize || 'text-sm');
         setAllowAICustomTextColor(data.allowAICustomTextColor === undefined ? true : data.allowAICustomTextColor);
         if (data.provider) setProvider(data.provider);
+        if (data.geminiApiKey) setGeminiApiKey(data.geminiApiKey);
         if (data.model) setModel(data.model);
         if (data.temperature !== undefined) setTemperature(data.temperature);
       } else {
@@ -268,12 +270,13 @@ export default function Home() {
           chatFontSize, // Save chat font size
           allowAICustomTextColor, // Save new setting
           provider,
+          geminiApiKey,
           model,
           temperature,
         };
         localStorage.setItem('chatAppData', JSON.stringify(data));
     }
-  }, [conversations, characters, currentConversationId, currentCharacterId, isDarkMode, useCensorship, lineThemeActive, isAutoReplying, chatFontSize, allowAICustomTextColor, provider, model, temperature]);
+  }, [conversations, characters, currentConversationId, currentCharacterId, isDarkMode, useCensorship, lineThemeActive, isAutoReplying, chatFontSize, allowAICustomTextColor, provider, geminiApiKey, model, temperature]);
 
   useEffect(() => {
     const sidebarElement = sidebarRef.current;
@@ -580,6 +583,7 @@ export default function Home() {
             temperature: 0.8,
             useCensorship: false,
             provider,
+            apiKey: provider === 'gemini' ? geminiApiKey : undefined,
         };
 
         const response = await fetch('/api/chutes', {
@@ -613,7 +617,7 @@ export default function Home() {
     } finally {
         setIsGenerating(false);
     }
-  }, [model, provider]);
+  }, [model, provider, geminiApiKey]);
 
 
   const sendMessage = useCallback(async (messageContent?: string, editedMessageId?: string) => {
@@ -715,7 +719,7 @@ export default function Home() {
                   { role: 'system', content: character.systemPrompt },
                   ...historyForApi
                 ];
-                const apiRequestBody: ChutesApiRequestBody = { model, messages: messagesPayload, temperature, useCensorship, provider };
+                const apiRequestBody: ChutesApiRequestBody = { model, messages: messagesPayload, temperature, useCensorship, provider, apiKey: provider === 'gemini' ? geminiApiKey : undefined };
 
                 if (localImageDataUrl && currentModelSupportsImage) {
                     apiRequestBody.imageDataUrl = localImageDataUrl;
@@ -793,7 +797,7 @@ export default function Home() {
             messagesPayload.push({ role: 'system', content: FORMATTING_INSTRUCTIONS_PROMPT });
             messagesPayload.push({ role: 'system', content: systemPrompt });
             messagesPayload.push(...historyForApi);
-            const apiRequestBody: ChutesApiRequestBody = { model, messages: messagesPayload, temperature, useCensorship, provider };
+            const apiRequestBody: ChutesApiRequestBody = { model, messages: messagesPayload, temperature, useCensorship, provider, apiKey: provider === 'gemini' ? geminiApiKey : undefined };
             if (isImageMessage && localImageDataUrl && currentModelSupportsImage && !editedMessageId) {
                 apiRequestBody.imageDataUrl = localImageDataUrl;
             }
@@ -841,7 +845,7 @@ export default function Home() {
     } finally {
         setIsSending(false);
     }
-  }, [input, imageToSend, currentConversationId, currentCharacterForNormalChat, currentModelSupportsImage, isSending, model, temperature, useCensorship, conversations, currentConversation, characters, provider]);
+  }, [input, imageToSend, currentConversationId, currentCharacterForNormalChat, currentModelSupportsImage, isSending, model, temperature, useCensorship, conversations, currentConversation, characters, provider, geminiApiKey]);
 
 
   const sendQuickMessage = useCallback((text: string) => {
@@ -993,7 +997,7 @@ export default function Home() {
           promptTextForSpeaker
         );
         const apiRequestBody: ChutesApiRequestBody = {
-          model: speakerModel, messages: apiPayloadMessages, temperature, useCensorship, provider
+          model: speakerModel, messages: apiPayloadMessages, temperature, useCensorship, provider, apiKey: provider === 'gemini' ? geminiApiKey : undefined
         };
 
         fetch('/api/chutes', {
@@ -1037,7 +1041,7 @@ export default function Home() {
 
         return currentGlobalConversations;
     });
-  }, [characters, isSending, generateApiMessagesForCharToChar, model, temperature, useCensorship, provider]);
+  }, [characters, isSending, generateApiMessagesForCharToChar, model, temperature, useCensorship, provider, geminiApiKey]);
 
 
   useEffect(() => {
@@ -1370,7 +1374,7 @@ export default function Home() {
       messagesPayload.push({ role: 'system', content: currentCharacterForNormalChat.systemPrompt });
       messagesPayload.push(...historyForApi, continuationPrompt);
 
-      const apiRequestBody: ChutesApiRequestBody = { model, messages: messagesPayload, temperature, useCensorship, provider };
+      const apiRequestBody: ChutesApiRequestBody = { model, messages: messagesPayload, temperature, useCensorship, provider, apiKey: provider === 'gemini' ? geminiApiKey : undefined };
       const response = await fetch('/api/chutes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(apiRequestBody) });
       if (!response.ok) { const errorData = await response.text(); throw new Error(`HTTP error! status: ${response.status}, message: ${errorData}`); }
       const data = await response.json();
@@ -1383,7 +1387,7 @@ export default function Home() {
         const errorMessage: Message = { id: `${Date.now()}-error-continue`, sender: currentCharacterForNormalChat.id, text: '連続応答の生成中にエラーが発生しました。', timestamp: new Date() };
         setConversations(prev => prev.map(conv => conv.id === currentConversationId ? { ...conv, messages: [...conv.messages, errorMessage] } : conv));
     } finally { setIsSending(false); }
-  }, [currentConversation, currentCharacterForNormalChat, isSending, model, temperature, useCensorship, conversations, currentConversationId, provider]);
+  }, [currentConversation, currentCharacterForNormalChat, isSending, model, temperature, useCensorship, conversations, currentConversationId, provider, geminiApiKey]);
 
   const handleRetry = useCallback(async (aiMessageId: string) => {
     if (!currentConversation || isSending) return;
@@ -1495,6 +1499,8 @@ export default function Home() {
         isDarkMode={isDarkMode}
         provider={provider}
         setProvider={setProvider}
+        geminiApiKey={geminiApiKey}
+        setGeminiApiKey={setGeminiApiKey}
         model={model}
         setModel={setModel}
         temperature={temperature}

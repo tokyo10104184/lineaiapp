@@ -11,9 +11,9 @@ export async function getAiResponse(payload: ChutesApiRequestBody): Promise<stri
   const isGemini = provider === 'gemini' || (!provider && model.toLowerCase().startsWith('gemini'));
 
   if (isGemini) {
-    const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+    const apiKey = payload.apiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
     if (!apiKey) {
-      throw new Error("Gemini APIキー (GEMINI_API_KEY または GOOGLE_API_KEY) が設定されていません。");
+      throw new Error("Gemini APIキーが設定されていません。設定画面からGemini APIキーを入力してください。");
     }
 
     try {
