@@ -6,7 +6,6 @@ import {
     FaPlay, FaStop, FaFistRaised, FaBalanceScale, FaCommentDots, FaSave, FaUndo, FaUsers, FaCog, FaChartBar, FaStore, FaMagic,
     FaCloudUploadAlt, FaCloudDownloadAlt, FaBrain, FaRedo, FaGlobe, FaProjectDiagram
 } from 'react-icons/fa';
-import { DmmBanner } from '../components/DmmBanner';
 import { supabase } from '../lib/supabase';
 import ConfirmationDialog from '../components/ui/ConfirmationDialog';
 import GroupChatCreationModal from '../components/GroupChatCreationModal';
@@ -1649,9 +1648,6 @@ export default function Home() {
 
           <div className={`flex-1 p-4 space-y-4 overflow-y-auto ${sidebarActualPanelBgColor} pr-1 custom-scrollbar`}>
             {/* Settings moved to modal */}
-            <div className={`pt-2 border-t ${generalBorderColor} mt-3`}>
-                <DmmBanner />
-            </div>
           </div>
         </div>
 
