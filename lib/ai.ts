@@ -1,50 +1,97 @@
 import { ChutesApiRequestBody } from './types'; // Assuming this type exists and is relevant
 
-// This function encapsulates the logic for calling the OpenRouter API.
+// This function encapsulates the logic for calling AI APIs (OpenRouter / Gemini).
 export async function getAiResponse(payload: ChutesApiRequestBody): Promise<string> {
-  const { messages, model, temperature = 0.7 } = payload;
+  const { messages, model, temperature = 0.7, provider } = payload;
 
   if (!messages || !model) {
     throw new Error('messages and model are required for AI call');
   }
 
-  // These headers are recommended by OpenRouter for identifying traffic.
-  const siteUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000";
-  const siteName = "Kint";
+  const isGemini = provider === 'gemini' || (!provider && model.toLowerCase().startsWith('gemini'));
 
-  try {
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: model,
-        messages: messages,
-        temperature: temperature,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("OpenRouter API Error:", response.status, errorText);
-      throw new Error(`OpenRouter API error: ${errorText}`);
+  if (isGemini) {
+    const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+    if (!apiKey) {
+      throw new Error("Gemini APIキー (GEMINI_API_KEY または GOOGLE_API_KEY) が設定されていません。");
     }
 
-    const data = await response.json();
-    const reply = data.choices[0]?.message?.content;
+    try {
+      const response = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: model,
+          messages: messages,
+          temperature: temperature,
+        }),
+      });
 
-    if (!reply) {
-      console.error("No reply from OpenRouter API:", data);
-      throw new Error("No reply from OpenRouter API.");
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("Gemini API Error:", response.status, errorText);
+        throw new Error(`Gemini API error: ${errorText}`);
+      }
+
+      const data = await response.json();
+      const reply = data.choices[0]?.message?.content;
+
+      if (!reply) {
+        console.error("No reply from Gemini API:", data);
+        throw new Error("No reply from Gemini API.");
+      }
+
+      return reply;
+    } catch (error) {
+      console.error("Error during Gemini API call:", error);
+      throw error;
+    }
+  } else {
+    const apiKey = process.env.OPENROUTER_API_KEY;
+    if (!apiKey) {
+      throw new Error("OpenRouter APIキー (OPENROUTER_API_KEY) が設定されていません。");
     }
 
-    return reply;
+    const siteUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000";
+    const siteName = "Kint";
 
-  } catch (error) {
-    console.error("Error during AI API call:", error);
-    // Re-throw the error to be handled by the calling API route
-    throw error;
+    try {
+      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${apiKey}`,
+          "HTTP-Referer": siteUrl,
+          "X-Title": siteName,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: model,
+          messages: messages,
+          temperature: temperature,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("OpenRouter API Error:", response.status, errorText);
+        throw new Error(`OpenRouter API error: ${errorText}`);
+      }
+
+      const data = await response.json();
+      const reply = data.choices[0]?.message?.content;
+
+      if (!reply) {
+        console.error("No reply from OpenRouter API:", data);
+        throw new Error("No reply from OpenRouter API.");
+      }
+
+      return reply;
+    } catch (error) {
+      console.error("Error during OpenRouter API call:", error);
+      throw error;
+    }
   }
 }
