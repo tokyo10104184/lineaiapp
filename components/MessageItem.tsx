@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from 'react';
-import { FaUserCircle, FaUndo, FaSave, FaRedo, FaPlay, FaEdit } from 'react-icons/fa';
+import { FaUserCircle, FaUndo, FaSave, FaRedo, FaPlay, FaEdit, FaMagic } from 'react-icons/fa';
 import { Message, Character, Conversation } from '../lib/types';
 
 interface MessageItemProps {
@@ -16,6 +16,7 @@ interface MessageItemProps {
   handleEditMessage: (id: string, text: string) => void;
   handleRetry: (id: string) => void;
   handleContinueConversation: () => void;
+  handleOpenAIEditMessageModal?: (msg: Message) => void;
   isSending: boolean;
   isDarkMode: boolean;
   lineThemeActive: boolean;
@@ -44,6 +45,7 @@ const MessageItem = React.memo(({
   handleEditMessage,
   handleRetry,
   handleContinueConversation,
+  handleOpenAIEditMessageModal,
   isSending,
   isDarkMode,
   lineThemeActive,
@@ -179,6 +181,18 @@ const MessageItem = React.memo(({
                 >
                   <FaPlay size={10} className="mr-1" />
                   <span>生成を続ける</span>
+                </button>
+              )}
+
+              {handleOpenAIEditMessageModal && (
+                <button
+                  onClick={() => handleOpenAIEditMessageModal(msg)}
+                  disabled={isSending}
+                  className={`flex items-center px-2 py-1 rounded-md text-xs ${isDarkMode ? 'text-indigo-300 hover:text-indigo-100 bg-indigo-900/40 hover:bg-indigo-800/60' : 'text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100'} transition-colors duration-150 opacity-90 hover:opacity-100`}
+                  title="AIでメッセージを再生成・指示編集"
+                >
+                  <FaMagic size={10} className="mr-1 text-indigo-400" />
+                  <span>AI編集</span>
                 </button>
               )}
             </div>

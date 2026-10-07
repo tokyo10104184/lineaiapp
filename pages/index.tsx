@@ -12,6 +12,7 @@ import GroupChatCreationModal from '../components/GroupChatCreationModal';
 import CharacterSelectionModal from '../components/CharacterSelectionModal';
 import NewCharacterChoiceModal from '../components/NewCharacterChoiceModal';
 import AIEditModal from '../components/AIEditModal';
+import AIMessageEditModal from '../components/AIMessageEditModal';
 import SettingsModal from '../components/SettingsModal';
 import GaugesModal from '../components/GaugesModal';
 import QuickCreateCharacterModal, { CreatorPersona } from '../components/QuickCreateCharacterModal';
@@ -154,6 +155,8 @@ export default function Home() {
   const [showQuickCreateModal, setShowQuickCreateModal] = useState(false);
   const [showNewCharacterChoiceModal, setShowNewCharacterChoiceModal] = useState(false);
   const [isAIEditModalOpen, setIsAIEditModalOpen] = useState(false);
+  const [isAIMessageEditModalOpen, setIsAIMessageEditModalOpen] = useState(false);
+  const [aiMessageEditTarget, setAiMessageEditTarget] = useState<Message | null>(null);
   const [showRemixTreeModal, setShowRemixTreeModal] = useState(false);
   const [isFooterOpen, setIsFooterOpen] = useState(false);
 
@@ -1569,6 +1572,26 @@ export default function Home() {
     await sendMessage(lastUserMessage.text, lastUserMessage.id);
   }, [currentConversation, isSending, sendMessage]);
 
+  const handleOpenAIEditMessageModal = useCallback((msg: Message) => {
+    setAiMessageEditTarget(msg);
+    setIsAIMessageEditModalOpen(true);
+  }, []);
+
+  const handleApplyAIMessageEdit = useCallback((messageId: string, newText: string) => {
+    if (!currentConversationId) return;
+    setConversations(prevConvs =>
+      prevConvs.map(conv => {
+        if (conv.id === currentConversationId) {
+          return {
+            ...conv,
+            messages: conv.messages.map(m => (m.id === messageId ? { ...m, text: newText } : m)),
+          };
+        }
+        return conv;
+      })
+    );
+  }, [currentConversationId]);
+
   return (
     <div className="h-screen flex flex-col selection:bg-indigo-500 selection:text-white antialiased" style={{ backgroundColor: rootPageActualBg }}>
       <Head>
@@ -1593,6 +1616,24 @@ export default function Home() {
         apiKey={activeApiKey}
         cloudflareAccountId={cloudflareAccountId}
       />}
+
+      {isAIMessageEditModalOpen && (
+        <AIMessageEditModal
+          isOpen={isAIMessageEditModalOpen}
+          onClose={() => {
+            setIsAIMessageEditModalOpen(false);
+            setAiMessageEditTarget(null);
+          }}
+          message={aiMessageEditTarget}
+          character={currentCharacterForNormalChat || null}
+          onApplyEdit={handleApplyAIMessageEdit}
+          isDarkMode={isDarkMode}
+          model={model}
+          provider={provider}
+          apiKey={activeApiKey}
+          cloudflareAccountId={cloudflareAccountId}
+        />
+      )}
 
       <NewCharacterChoiceModal
         isOpen={showNewCharacterChoiceModal}
@@ -1934,6 +1975,7 @@ export default function Home() {
                                 handleEditMessage={handleEditMessage}
                                 handleRetry={handleRetry}
                                 handleContinueConversation={handleContinueConversation}
+                                handleOpenAIEditMessageModal={handleOpenAIEditMessageModal}
                                 isSending={isSending}
                                 isDarkMode={isDarkMode}
                                 lineThemeActive={lineThemeActive}
