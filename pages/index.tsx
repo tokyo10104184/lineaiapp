@@ -76,7 +76,17 @@ export default function Home() {
   const [input, setInput] = useState('')
   const [provider, setProvider] = useState<'openrouter' | 'gemini'>('openrouter')
   const [geminiApiKey, setGeminiApiKey] = useState('')
-  const [model, setModel] = useState('xiaomi/mimo-v2-flash:free')
+  const [openRouterModel, setOpenRouterModel] = useState('xiaomi/mimo-v2-flash:free')
+  const [geminiModel, setGeminiModel] = useState('gemini-2.5-flash')
+
+  const model = provider === 'gemini' ? geminiModel : openRouterModel;
+  const setModel = useCallback((newModel: string) => {
+    if (provider === 'gemini') {
+      setGeminiModel(newModel);
+    } else {
+      setOpenRouterModel(newModel);
+    }
+  }, [provider]);
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [temperature, setTemperature] = useState(0.7)
   const [characters, setCharacters] = useState<Character[]>([])
@@ -200,7 +210,15 @@ export default function Home() {
         setAllowAICustomTextColor(data.allowAICustomTextColor === undefined ? true : data.allowAICustomTextColor);
         if (data.provider) setProvider(data.provider);
         if (data.geminiApiKey) setGeminiApiKey(data.geminiApiKey);
-        if (data.model) setModel(data.model);
+        if (data.openRouterModel) setOpenRouterModel(data.openRouterModel);
+        if (data.geminiModel) setGeminiModel(data.geminiModel);
+        if (data.model && !data.openRouterModel && !data.geminiModel) {
+          if (data.provider === 'gemini' || data.model.startsWith('gemini')) {
+            setGeminiModel(data.model);
+          } else {
+            setOpenRouterModel(data.model);
+          }
+        }
         if (data.temperature !== undefined) setTemperature(data.temperature);
       } else {
         // Set default settings for a fresh start
@@ -271,12 +289,14 @@ export default function Home() {
           allowAICustomTextColor, // Save new setting
           provider,
           geminiApiKey,
+          openRouterModel,
+          geminiModel,
           model,
           temperature,
         };
         localStorage.setItem('chatAppData', JSON.stringify(data));
     }
-  }, [conversations, characters, currentConversationId, currentCharacterId, isDarkMode, useCensorship, lineThemeActive, isAutoReplying, chatFontSize, allowAICustomTextColor, provider, geminiApiKey, model, temperature]);
+  }, [conversations, characters, currentConversationId, currentCharacterId, isDarkMode, useCensorship, lineThemeActive, isAutoReplying, chatFontSize, allowAICustomTextColor, provider, geminiApiKey, openRouterModel, geminiModel, model, temperature]);
 
   useEffect(() => {
     const sidebarElement = sidebarRef.current;

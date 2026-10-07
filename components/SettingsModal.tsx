@@ -100,9 +100,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                   type="button"
                   onClick={() => {
                     if (setProvider) setProvider('openrouter');
-                    if (!model || model.startsWith('gemini')) {
-                      setModel('xiaomi/mimo-v2-flash:free');
-                    }
                   }}
                   className={`py-2 px-3 text-sm font-medium rounded-lg border transition-colors ${
                     provider === 'openrouter'
@@ -116,9 +113,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                   type="button"
                   onClick={() => {
                     if (setProvider) setProvider('gemini');
-                    if (!model || model.includes('/') || model === 'xiaomi/mimo-v2-flash:free') {
-                      setModel('gemini-2.5-flash');
-                    }
                   }}
                   className={`py-2 px-3 text-sm font-medium rounded-lg border transition-colors ${
                     provider === 'gemini'
