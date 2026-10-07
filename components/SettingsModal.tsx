@@ -5,6 +5,8 @@ interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
   isDarkMode: boolean;
+  provider?: 'openrouter' | 'gemini';
+  setProvider?: (provider: 'openrouter' | 'gemini') => void;
   model: string;
   setModel: (model: string) => void;
   temperature: number;
@@ -24,6 +26,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   isOpen,
   onClose,
   isDarkMode,
+  provider = 'openrouter',
+  setProvider,
   model,
   setModel,
   temperature,
@@ -86,15 +90,56 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         <div className="space-y-8 overflow-y-auto custom-scrollbar pr-3 pb-2">
           <SettingSection title="AI設定">
             <div>
+              <label className="block text-sm font-medium mb-1.5">APIプロバイダー</label>
+              <div className="grid grid-cols-2 gap-2 mb-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (setProvider) setProvider('openrouter');
+                    if (!model || model.startsWith('gemini')) {
+                      setModel('xiaomi/mimo-v2-flash:free');
+                    }
+                  }}
+                  className={`py-2 px-3 text-sm font-medium rounded-lg border transition-colors ${
+                    provider === 'openrouter'
+                      ? 'bg-indigo-600 text-white border-indigo-600'
+                      : `${inputBgColor} ${textColor} ${borderColor}`
+                  }`}
+                >
+                  OpenRouter
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (setProvider) setProvider('gemini');
+                    if (!model || model.includes('/') || model === 'xiaomi/mimo-v2-flash:free') {
+                      setModel('gemini-2.5-flash');
+                    }
+                  }}
+                  className={`py-2 px-3 text-sm font-medium rounded-lg border transition-colors ${
+                    provider === 'gemini'
+                      ? 'bg-indigo-600 text-white border-indigo-600'
+                      : `${inputBgColor} ${textColor} ${borderColor}`
+                  }`}
+                >
+                  Gemini
+                </button>
+              </div>
+            </div>
+            <div>
               <label className={`block text-sm font-medium mb-1.5`}>AIモデル</label>
               <input
                 type="text"
                 className={`w-full px-3 py-2.5 border rounded-lg text-sm shadow-sm ${inputBgColor} ${textColor} ${borderColor} focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors`}
                 value={model}
                 onChange={(e) => setModel(e.target.value)}
-                placeholder="例: xiaomi/mimo-v2-flash:free"
+                placeholder={provider === 'gemini' ? "例: gemini-2.5-flash" : "例: xiaomi/mimo-v2-flash:free"}
               />
-              <div className={`text-xs mt-1.5 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}> OpenRouterなどのモデルIDを直接入力してください。 </div>
+              <div className={`text-xs mt-1.5 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                {provider === 'gemini'
+                  ? 'Geminiのモデル名を入力してください (例: gemini-2.5-flash, gemini-1.5-flash)'
+                  : 'OpenRouterなどのモデルIDを直接入力してください。'}
+              </div>
             </div>
             <div>
               <div className="flex items-center justify-between mb-1.5">
