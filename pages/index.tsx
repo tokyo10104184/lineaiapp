@@ -74,19 +74,36 @@ export default function Home() {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [currentConversationId, setCurrentConversationId] = useState<string>('')
   const [input, setInput] = useState('')
-  const [provider, setProvider] = useState<'openrouter' | 'gemini'>('openrouter')
+  const [provider, setProvider] = useState<'openrouter' | 'gemini' | 'groq' | 'cloudflare'>('openrouter')
   const [geminiApiKey, setGeminiApiKey] = useState('')
+  const [groqApiKey, setGroqApiKey] = useState('')
+  const [cloudflareApiKey, setCloudflareApiKey] = useState('')
+  const [cloudflareAccountId, setCloudflareAccountId] = useState('')
   const [openRouterModel, setOpenRouterModel] = useState('xiaomi/mimo-v2-flash:free')
   const [geminiModel, setGeminiModel] = useState('gemini-2.5-flash')
+  const [groqModel, setGroqModel] = useState('llama-3.3-70b-versatile')
+  const [cloudflareModel, setCloudflareModel] = useState('@cf/meta/llama-3.1-8b-instruct')
 
-  const model = provider === 'gemini' ? geminiModel : openRouterModel;
+  const model = useMemo(() => {
+    if (provider === 'gemini') return geminiModel;
+    if (provider === 'groq') return groqModel;
+    if (provider === 'cloudflare') return cloudflareModel;
+    return openRouterModel;
+  }, [provider, geminiModel, groqModel, cloudflareModel, openRouterModel]);
+
   const setModel = useCallback((newModel: string) => {
-    if (provider === 'gemini') {
-      setGeminiModel(newModel);
-    } else {
-      setOpenRouterModel(newModel);
-    }
+    if (provider === 'gemini') setGeminiModel(newModel);
+    else if (provider === 'groq') setGroqModel(newModel);
+    else if (provider === 'cloudflare') setCloudflareModel(newModel);
+    else setOpenRouterModel(newModel);
   }, [provider]);
+
+  const activeApiKey = useMemo(() => {
+    if (provider === 'gemini') return geminiApiKey;
+    if (provider === 'groq') return groqApiKey;
+    if (provider === 'cloudflare') return cloudflareApiKey;
+    return undefined;
+  }, [provider, geminiApiKey, groqApiKey, cloudflareApiKey]);
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [temperature, setTemperature] = useState(0.7)
   const [characters, setCharacters] = useState<Character[]>([])
@@ -210,8 +227,13 @@ export default function Home() {
         setAllowAICustomTextColor(data.allowAICustomTextColor === undefined ? true : data.allowAICustomTextColor);
         if (data.provider) setProvider(data.provider);
         if (data.geminiApiKey) setGeminiApiKey(data.geminiApiKey);
+        if (data.groqApiKey) setGroqApiKey(data.groqApiKey);
+        if (data.cloudflareApiKey) setCloudflareApiKey(data.cloudflareApiKey);
+        if (data.cloudflareAccountId) setCloudflareAccountId(data.cloudflareAccountId);
         if (data.openRouterModel) setOpenRouterModel(data.openRouterModel);
         if (data.geminiModel) setGeminiModel(data.geminiModel);
+        if (data.groqModel) setGroqModel(data.groqModel);
+        if (data.cloudflareModel) setCloudflareModel(data.cloudflareModel);
         if (data.model && !data.openRouterModel && !data.geminiModel) {
           if (data.provider === 'gemini' || data.model.startsWith('gemini')) {
             setGeminiModel(data.model);
@@ -289,14 +311,19 @@ export default function Home() {
           allowAICustomTextColor, // Save new setting
           provider,
           geminiApiKey,
+          groqApiKey,
+          cloudflareApiKey,
+          cloudflareAccountId,
           openRouterModel,
           geminiModel,
+          groqModel,
+          cloudflareModel,
           model,
           temperature,
         };
         localStorage.setItem('chatAppData', JSON.stringify(data));
     }
-  }, [conversations, characters, currentConversationId, currentCharacterId, isDarkMode, useCensorship, lineThemeActive, isAutoReplying, chatFontSize, allowAICustomTextColor, provider, geminiApiKey, openRouterModel, geminiModel, model, temperature]);
+  }, [conversations, characters, currentConversationId, currentCharacterId, isDarkMode, useCensorship, lineThemeActive, isAutoReplying, chatFontSize, allowAICustomTextColor, provider, geminiApiKey, groqApiKey, cloudflareApiKey, cloudflareAccountId, openRouterModel, geminiModel, groqModel, cloudflareModel, model, temperature]);
 
   useEffect(() => {
     const sidebarElement = sidebarRef.current;
@@ -603,7 +630,8 @@ export default function Home() {
             temperature: 0.8,
             useCensorship: false,
             provider,
-            apiKey: provider === 'gemini' ? geminiApiKey : undefined,
+            apiKey: activeApiKey,
+            cloudflareAccountId: provider === 'cloudflare' ? cloudflareAccountId : undefined,
         };
 
         const response = await fetch('/api/chutes', {
@@ -637,7 +665,7 @@ export default function Home() {
     } finally {
         setIsGenerating(false);
     }
-  }, [model, provider, geminiApiKey]);
+  }, [model, provider, activeApiKey, cloudflareAccountId]);
 
 
   const sendMessage = useCallback(async (messageContent?: string, editedMessageId?: string) => {
@@ -739,7 +767,7 @@ export default function Home() {
                   { role: 'system', content: character.systemPrompt },
                   ...historyForApi
                 ];
-                const apiRequestBody: ChutesApiRequestBody = { model, messages: messagesPayload, temperature, useCensorship, provider, apiKey: provider === 'gemini' ? geminiApiKey : undefined };
+                const apiRequestBody: ChutesApiRequestBody = { model, messages: messagesPayload, temperature, useCensorship, provider, apiKey: activeApiKey, cloudflareAccountId: provider === 'cloudflare' ? cloudflareAccountId : undefined };
 
                 if (localImageDataUrl && currentModelSupportsImage) {
                     apiRequestBody.imageDataUrl = localImageDataUrl;
@@ -817,7 +845,7 @@ export default function Home() {
             messagesPayload.push({ role: 'system', content: FORMATTING_INSTRUCTIONS_PROMPT });
             messagesPayload.push({ role: 'system', content: systemPrompt });
             messagesPayload.push(...historyForApi);
-            const apiRequestBody: ChutesApiRequestBody = { model, messages: messagesPayload, temperature, useCensorship, provider, apiKey: provider === 'gemini' ? geminiApiKey : undefined };
+            const apiRequestBody: ChutesApiRequestBody = { model, messages: messagesPayload, temperature, useCensorship, provider, apiKey: activeApiKey, cloudflareAccountId: provider === 'cloudflare' ? cloudflareAccountId : undefined };
             if (isImageMessage && localImageDataUrl && currentModelSupportsImage && !editedMessageId) {
                 apiRequestBody.imageDataUrl = localImageDataUrl;
             }
@@ -865,7 +893,7 @@ export default function Home() {
     } finally {
         setIsSending(false);
     }
-  }, [input, imageToSend, currentConversationId, currentCharacterForNormalChat, currentModelSupportsImage, isSending, model, temperature, useCensorship, conversations, currentConversation, characters, provider, geminiApiKey]);
+  }, [input, imageToSend, currentConversationId, currentCharacterForNormalChat, currentModelSupportsImage, isSending, model, temperature, useCensorship, conversations, currentConversation, characters, provider, activeApiKey, cloudflareAccountId]);
 
 
   const sendQuickMessage = useCallback((text: string) => {
@@ -1017,7 +1045,7 @@ export default function Home() {
           promptTextForSpeaker
         );
         const apiRequestBody: ChutesApiRequestBody = {
-          model: speakerModel, messages: apiPayloadMessages, temperature, useCensorship, provider, apiKey: provider === 'gemini' ? geminiApiKey : undefined
+          model: speakerModel, messages: apiPayloadMessages, temperature, useCensorship, provider, apiKey: activeApiKey, cloudflareAccountId: provider === 'cloudflare' ? cloudflareAccountId : undefined
         };
 
         fetch('/api/chutes', {
@@ -1061,7 +1089,7 @@ export default function Home() {
 
         return currentGlobalConversations;
     });
-  }, [characters, isSending, generateApiMessagesForCharToChar, model, temperature, useCensorship, provider, geminiApiKey]);
+  }, [characters, isSending, generateApiMessagesForCharToChar, model, temperature, useCensorship, provider, activeApiKey, cloudflareAccountId]);
 
 
   useEffect(() => {
@@ -1394,7 +1422,7 @@ export default function Home() {
       messagesPayload.push({ role: 'system', content: currentCharacterForNormalChat.systemPrompt });
       messagesPayload.push(...historyForApi, continuationPrompt);
 
-      const apiRequestBody: ChutesApiRequestBody = { model, messages: messagesPayload, temperature, useCensorship, provider, apiKey: provider === 'gemini' ? geminiApiKey : undefined };
+      const apiRequestBody: ChutesApiRequestBody = { model, messages: messagesPayload, temperature, useCensorship, provider, apiKey: activeApiKey, cloudflareAccountId: provider === 'cloudflare' ? cloudflareAccountId : undefined };
       const response = await fetch('/api/chutes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(apiRequestBody) });
       if (!response.ok) { const errorData = await response.text(); throw new Error(`HTTP error! status: ${response.status}, message: ${errorData}`); }
       const data = await response.json();
@@ -1407,7 +1435,7 @@ export default function Home() {
         const errorMessage: Message = { id: `${Date.now()}-error-continue`, sender: currentCharacterForNormalChat.id, text: '連続応答の生成中にエラーが発生しました。', timestamp: new Date() };
         setConversations(prev => prev.map(conv => conv.id === currentConversationId ? { ...conv, messages: [...conv.messages, errorMessage] } : conv));
     } finally { setIsSending(false); }
-  }, [currentConversation, currentCharacterForNormalChat, isSending, model, temperature, useCensorship, conversations, currentConversationId, provider, geminiApiKey]);
+  }, [currentConversation, currentCharacterForNormalChat, isSending, model, temperature, useCensorship, conversations, currentConversationId, provider, activeApiKey, cloudflareAccountId]);
 
   const handleRetry = useCallback(async (aiMessageId: string) => {
     if (!currentConversation || isSending) return;
@@ -1521,6 +1549,12 @@ export default function Home() {
         setProvider={setProvider}
         geminiApiKey={geminiApiKey}
         setGeminiApiKey={setGeminiApiKey}
+        groqApiKey={groqApiKey}
+        setGroqApiKey={setGroqApiKey}
+        cloudflareApiKey={cloudflareApiKey}
+        setCloudflareApiKey={setCloudflareApiKey}
+        cloudflareAccountId={cloudflareAccountId}
+        setCloudflareAccountId={setCloudflareAccountId}
         model={model}
         setModel={setModel}
         temperature={temperature}

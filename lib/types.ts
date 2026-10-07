@@ -53,6 +53,7 @@ export interface ChutesApiRequestBody {
   temperature: number;
   useCensorship: boolean;
   imageDataUrl?: string;
-  provider?: 'openrouter' | 'gemini';
+  provider?: 'openrouter' | 'gemini' | 'groq' | 'cloudflare';
   apiKey?: string;
+  cloudflareAccountId?: string;
 }
