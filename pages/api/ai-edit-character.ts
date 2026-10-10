@@ -17,6 +17,85 @@ Rules:
 - Maintain the character's core identity unless the instruction explicitly asks to change it.
 - Ensure the name, description, and system prompt are written in natural Japanese unless requested otherwise.`;
 
+function parseAiCharacterJson(reply: string): any {
+  if (!reply || typeof reply !== 'string') return null;
+  let str = reply.trim();
+
+  // 1. Remove internal reasoning / thinking tags
+  str = str.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+
+  // 2. Extract from markdown code block if present
+  const codeBlockMatch = str.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  if (codeBlockMatch) {
+    str = codeBlockMatch[1].trim();
+  }
+
+  // 3. Match outer JSON object
+  const jsonObjectMatch = str.match(/\{[\s\S]*\}/);
+  if (jsonObjectMatch) {
+    str = jsonObjectMatch[0];
+  }
+
+  // Helper to attempt JSON parsing with minor cleanups
+  function tryParse(s: string) {
+    try {
+      return JSON.parse(s);
+    } catch (e) {
+      try {
+        // Fix trailing commas
+        const fixed = s.replace(/,\s*([\}\]])/g, '$1');
+        return JSON.parse(fixed);
+      } catch (e2) {
+        try {
+          // Replace unescaped control characters (newlines/tabs) inside string literals
+          let fixed = s.replace(/[\u0000-\u001F\u007F-\u009F]/g, (c) => {
+            if (c === '\n') return '\\n';
+            if (c === '\r') return '\\r';
+            if (c === '\t') return '\\t';
+            return '';
+          });
+          fixed = fixed.replace(/,\s*([\}\]])/g, '$1');
+          return JSON.parse(fixed);
+        } catch (e3) {
+          return null;
+        }
+      }
+    }
+  }
+
+  let parsed = tryParse(str);
+  if (!parsed && str !== reply) {
+    parsed = tryParse(reply);
+  }
+  if (parsed) return parsed;
+
+  // Fallback: regex extraction for individual fields if strict parsing failed
+  const getField = (fieldName: string) => {
+    const patterns = [
+      new RegExp(`"${fieldName}"\\s*:\\s*"([\\s\\S]*?)"(?=\\s*,\\s*"|\\s*\\})`),
+      new RegExp(`"${fieldName}"\\s*:\\s*"([\\s\\S]*?)"`),
+      new RegExp(`${fieldName}\\s*:\\s*"([\\s\\S]*?)"`),
+    ];
+    for (const re of patterns) {
+      const m = reply.match(re);
+      if (m && m[1]) {
+        return m[1].replace(/\\n/g, '\n').replace(/\\"/g, '"');
+      }
+    }
+    return undefined;
+  };
+
+  const name = getField('name');
+  const description = getField('description');
+  const systemPrompt = getField('systemPrompt');
+
+  if (name || description || systemPrompt) {
+    return { name, description, systemPrompt };
+  }
+
+  return null;
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method Not Allowed' });
@@ -61,27 +140,10 @@ ${instruction}
 
     const reply = await getAiResponse(aiPayload);
 
-    let jsonString = typeof reply === 'string' ? reply.trim() : String(reply).trim();
+    const updatedFields = parseAiCharacterJson(reply);
 
-    // Remove internal reasoning tags if present
-    jsonString = jsonString.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
-
-    // Strip markdown code block wrappers
-    if (jsonString.includes('```')) {
-      jsonString = jsonString.replace(/```(?:json)?\s*/gi, '').replace(/```/g, '').trim();
-    }
-
-    // Extract JSON object match
-    const jsonMatch = jsonString.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      jsonString = jsonMatch[0];
-    }
-
-    let updatedFields: any;
-    try {
-      updatedFields = JSON.parse(jsonString);
-    } catch (parseErr) {
-      console.error('Failed to parse JSON from AI response:', reply);
+    if (!updatedFields) {
+      console.error('Failed to parse character JSON from AI response:', reply);
       throw new Error('AIからの返答をJSONとして解析できませんでした。');
     }
 
