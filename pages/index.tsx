@@ -143,6 +143,11 @@ export default function Home() {
   const [publishingCharacterId, setPublishingCharacterId] = useState<string | null>(null);
   const [remixBaseCharacter, setRemixBaseCharacter] = useState<Character | null>(null);
   const [isSavingMemory, setIsSavingMemory] = useState(false);
+  const [customPersonaPrompts, setCustomPersonaPrompts] = useState<Record<CreatorPersona, string>>({
+    wholesome: CREATOR_PERSONA_PROMPTS.wholesome,
+    extreme: CREATOR_PERSONA_PROMPTS.extreme,
+    erotic: CREATOR_PERSONA_PROMPTS.erotic,
+  });
 
   const [showDeleteConversationDialog, setShowDeleteConversationDialog] = useState(false);
   const [conversationToDeleteId, setConversationToDeleteId] = useState<string | null>(null);
@@ -235,6 +240,7 @@ export default function Home() {
         if (data.groqApiKey) setGroqApiKey(data.groqApiKey);
         if (data.cloudflareApiKey) setCloudflareApiKey(data.cloudflareApiKey);
         if (data.cloudflareAccountId) setCloudflareAccountId(data.cloudflareAccountId);
+        if (data.customPersonaPrompts) setCustomPersonaPrompts(data.customPersonaPrompts);
         if (data.openRouterModel) setOpenRouterModel(data.openRouterModel);
         if (data.geminiModel) setGeminiModel(data.geminiModel);
         if (data.groqModel) setGroqModel(data.groqModel);
@@ -325,10 +331,11 @@ export default function Home() {
           cloudflareModel,
           model,
           temperature,
+          customPersonaPrompts,
         };
         localStorage.setItem('chatAppData', JSON.stringify(data));
     }
-  }, [conversations, characters, currentConversationId, currentCharacterId, isDarkMode, useCensorship, streamResponse, lineThemeActive, isAutoReplying, chatFontSize, allowAICustomTextColor, provider, geminiApiKey, groqApiKey, cloudflareApiKey, cloudflareAccountId, openRouterModel, geminiModel, groqModel, cloudflareModel, model, temperature]);
+  }, [conversations, characters, currentConversationId, currentCharacterId, isDarkMode, useCensorship, streamResponse, lineThemeActive, isAutoReplying, chatFontSize, allowAICustomTextColor, provider, geminiApiKey, groqApiKey, cloudflareApiKey, cloudflareAccountId, openRouterModel, geminiModel, groqModel, cloudflareModel, model, temperature, customPersonaPrompts]);
 
   useEffect(() => {
     const sidebarElement = sidebarRef.current;
@@ -621,10 +628,10 @@ export default function Home() {
   }, [editingCharacter, generateRandomCharacterValues]);
 
 
-  const handleGeneratePrompt = useCallback(async (persona: CreatorPersona, userPrompt: string) => {
+  const handleGeneratePrompt = useCallback(async (persona: CreatorPersona, userPrompt: string, customSystemPrompt?: string) => {
     setIsGenerating(true);
     try {
-        const creatorSystemPrompt = CREATOR_PERSONA_PROMPTS[persona];
+        const creatorSystemPrompt = customSystemPrompt || customPersonaPrompts[persona] || CREATOR_PERSONA_PROMPTS[persona];
         const messagesPayload = [
             { role: 'system', content: creatorSystemPrompt },
             { role: 'user', content: userPrompt + '\n\n(重要: 生成されるシステムプロンプトは必ず日本語で出力してください。)' }
@@ -670,7 +677,7 @@ export default function Home() {
     } finally {
         setIsGenerating(false);
     }
-  }, [model, provider, activeApiKey, cloudflareAccountId]);
+  }, [model, provider, activeApiKey, cloudflareAccountId, customPersonaPrompts, remixBaseCharacter?.public_id]);
 
 
   const sendMessage = useCallback(async (messageContent?: string, editedMessageId?: string) => {
@@ -1739,7 +1746,9 @@ export default function Home() {
         onClose={() => { setShowQuickCreateModal(false); setRemixBaseCharacter(null); }}
         isDarkMode={isDarkMode}
         isGenerating={isGenerating}
-        onGenerate={(persona, userPrompt) => {
+        personaPrompts={customPersonaPrompts}
+        onSavePersonaPrompts={(newPrompts) => setCustomPersonaPrompts(newPrompts)}
+        onGenerate={(persona, userPrompt, customSystemPrompt) => {
              // Wrap the handleGeneratePrompt to inject remix context if needed
              let finalPrompt = userPrompt;
              if (remixBaseCharacter) {
@@ -1751,12 +1760,7 @@ export default function Home() {
 ユーザーの指示: ${userPrompt}
 (上記のベースキャラクターを元に、ユーザーの指示に従って新しいキャラクター設定を作成してください)`;
              }
-             handleGeneratePrompt(persona, finalPrompt);
-             // handleGeneratePrompt sets newCharacter. We might want to set parent_id there too.
-             // But handleGeneratePrompt implementation just sets 'newCharacter'.
-             // We can use a useEffect or modify handleGeneratePrompt.
-             // Let's modify handleGeneratePrompt separately or here via side effect?
-             // Actually, modifying handleGeneratePrompt is cleaner.
+             handleGeneratePrompt(persona, finalPrompt, customSystemPrompt);
         }}
       />
 
