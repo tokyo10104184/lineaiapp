@@ -61,18 +61,29 @@ ${instruction}
 
     const reply = await getAiResponse(aiPayload);
 
-    let jsonString = reply.trim();
-    if (jsonString.startsWith('```')) {
-      jsonString = jsonString.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
+    let jsonString = typeof reply === 'string' ? reply.trim() : String(reply).trim();
+
+    // Remove internal reasoning tags if present
+    jsonString = jsonString.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+
+    // Strip markdown code block wrappers
+    if (jsonString.includes('```')) {
+      jsonString = jsonString.replace(/```(?:json)?\s*/gi, '').replace(/```/g, '').trim();
     }
 
-    // Fallback: extract first json object match if there is extraneous text
+    // Extract JSON object match
     const jsonMatch = jsonString.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       jsonString = jsonMatch[0];
     }
 
-    const updatedFields = JSON.parse(jsonString);
+    let updatedFields: any;
+    try {
+      updatedFields = JSON.parse(jsonString);
+    } catch (parseErr) {
+      console.error('Failed to parse JSON from AI response:', reply);
+      throw new Error('AIからの返答をJSONとして解析できませんでした。');
+    }
 
     const proposedCharacter: Character = {
       ...character,
