@@ -101,13 +101,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
-  const { character, instruction, model, provider, apiKey, cloudflareAccountId } = req.body as {
+  const { character, instruction, model, provider, apiKey, cloudflareAccountId, expertPersonaPrompt } = req.body as {
     character?: Character;
     instruction?: string;
     model?: string;
     provider?: 'openrouter' | 'gemini' | 'groq' | 'cloudflare';
     apiKey?: string;
     cloudflareAccountId?: string;
+    expertPersonaPrompt?: string;
   };
 
   if (!character || !instruction || !model) {
@@ -125,10 +126,14 @@ ${instruction}
 
 上記の編集指示に従ってキャラクター設定を更新し、指定されたJSON形式のみで出力してください。`;
 
+    const systemPromptContent = expertPersonaPrompt
+      ? `${expertPersonaPrompt}\n\n${EDIT_CHARACTER_SYSTEM_PROMPT}`
+      : EDIT_CHARACTER_SYSTEM_PROMPT;
+
     const aiPayload: ChutesApiRequestBody = {
       model,
       messages: [
-        { role: 'system', content: EDIT_CHARACTER_SYSTEM_PROMPT },
+        { role: 'system', content: systemPromptContent },
         { role: 'user', content: userPrompt },
       ],
       temperature: 0.7,
