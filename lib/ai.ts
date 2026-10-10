@@ -1,12 +1,43 @@
 import { ChutesApiRequestBody } from './types'; // Assuming this type exists and is relevant
 
+export function normalizeMessages(messages: Array<{ role: string; content: any; [key: string]: any }>) {
+  if (!messages || messages.length === 0) return messages;
+
+  const systemContents: string[] = [];
+  const nonSystemMessages: typeof messages = [];
+
+  for (const msg of messages) {
+    if (msg.role === 'system') {
+      const textContent = typeof msg.content === 'string' ? msg.content.trim() : extractTextContent(msg.content).trim();
+      if (textContent) {
+        systemContents.push(textContent);
+      }
+    } else {
+      nonSystemMessages.push(msg);
+    }
+  }
+
+  const normalized: typeof messages = [];
+  if (systemContents.length > 0) {
+    normalized.push({
+      role: 'system',
+      content: systemContents.join('\n\n'),
+    });
+  }
+
+  normalized.push(...nonSystemMessages);
+  return normalized;
+}
+
 // Helper to get raw Response object (for streaming or non-streaming)
 export async function getAiResponseRaw(payload: ChutesApiRequestBody, stream: boolean = false): Promise<Response> {
-  const { messages, model, temperature = 0.7, provider, cloudflareAccountId } = payload;
+  const { messages: rawMessages, model, temperature = 0.7, provider, cloudflareAccountId } = payload;
 
-  if (!messages || !model) {
+  if (!rawMessages || !model) {
     throw new Error('messages and model are required for AI call');
   }
+
+  const messages = normalizeMessages(rawMessages);
 
   const selectedProvider = provider || (model.toLowerCase().startsWith('gemini') ? 'gemini' : 'openrouter');
 

@@ -1622,6 +1622,8 @@ export default function Home() {
         provider={provider}
         apiKey={activeApiKey}
         cloudflareAccountId={cloudflareAccountId}
+        personaPrompts={customPersonaPrompts}
+        onSavePersonaPrompts={setCustomPersonaPrompts}
       />}
 
       {isAIMessageEditModalOpen && (

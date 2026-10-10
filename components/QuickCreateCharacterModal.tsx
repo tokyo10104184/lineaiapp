@@ -14,7 +14,7 @@ interface QuickCreateCharacterModalProps {
   onSavePersonaPrompts?: (prompts: Record<CreatorPersona, string>) => void;
 }
 
-const CREATOR_PERSONAS = {
+export const CREATOR_PERSONAS = {
     wholesome: {
       name: '健全恋愛専門家',
       description: '心温まる、ドキドキする健全な恋愛キャラクターを創作します。',
