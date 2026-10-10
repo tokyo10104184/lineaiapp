@@ -97,7 +97,7 @@ export async function getAiResponseRaw(payload: ChutesApiRequestBody, stream: bo
 
     return response;
   } else {
-    const apiKey = process.env.OPENROUTER_API_KEY;
+    const apiKey = payload.apiKey || process.env.OPENROUTER_API_KEY;
     if (!apiKey) {
       throw new Error("OpenRouter APIキー (OPENROUTER_API_KEY) が設定されていません。");
     }
@@ -131,14 +131,61 @@ export async function getAiResponseRaw(payload: ChutesApiRequestBody, stream: bo
   }
 }
 
+function extractTextContent(content: any): string {
+  if (typeof content === 'string') {
+    return content;
+  }
+  if (Array.isArray(content)) {
+    return content
+      .map((part: any) => {
+        if (typeof part === 'string') return part;
+        if (part && typeof part === 'object') {
+          return part.text || part.content || part.value || '';
+        }
+        return '';
+      })
+      .join('');
+  }
+  if (content && typeof content === 'object') {
+    return content.text || content.content || content.value || '';
+  }
+  return '';
+}
+
 // This function encapsulates the logic for calling AI APIs (OpenRouter / Gemini / Groq / Cloudflare).
 export async function getAiResponse(payload: ChutesApiRequestBody): Promise<string> {
   const response = await getAiResponseRaw(payload, false);
   const data = await response.json();
-  const reply = data.choices?.[0]?.message?.content || data.result?.response || data.result?.choices?.[0]?.message?.content;
+
+  if (data.error) {
+    const errMsg = typeof data.error === 'string' ? data.error : data.error.message || JSON.stringify(data.error);
+    console.error("API error in payload:", data.error);
+    throw new Error(`API error: ${errMsg}`);
+  }
+
+  const choice = data.choices?.[0];
+  const candidate = data.candidates?.[0];
+  const result = data.result;
+
+  const rawContent =
+    choice?.message?.content ??
+    choice?.message?.reasoning ??
+    choice?.message?.reasoning_content ??
+    choice?.text ??
+    result?.response ??
+    result?.choices?.[0]?.message?.content ??
+    candidate?.content?.parts?.[0]?.text ??
+    data.output ??
+    data.response ??
+    data.text;
+
+  const reply = extractTextContent(rawContent).trim();
 
   if (!reply) {
-    console.error("No reply from API:", data);
+    console.error("No reply from API:", JSON.stringify(data));
+    if (choice?.finish_reason) {
+      throw new Error(`API returned empty response (finish_reason: ${choice.finish_reason}).`);
+    }
     throw new Error("No reply from API.");
   }
 
