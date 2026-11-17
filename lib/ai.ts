@@ -74,7 +74,7 @@ export async function getAiResponseRaw(payload: ChutesApiRequestBody, stream: bo
       throw new Error("Groq APIキーが設定されていません。設定画面からGroq APIキーを入力してください。");
     }
 
-    const response = await fetch("https://api.numes.ai/api/v1/chat/completions", {
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${apiKey}`,
@@ -92,6 +92,33 @@ export async function getAiResponseRaw(payload: ChutesApiRequestBody, stream: bo
       const errorText = await response.text();
       console.error("Groq API Error:", response.status, errorText);
       throw new Error(`Groq API error: ${errorText}`);
+    }
+
+    return response;
+  } else if (selectedProvider === 'numes') {
+    const apiKey = payload.apiKey || process.env.NUMES_API_KEY;
+    if (!apiKey) {
+      throw new Error("Numes APIキーが設定されていません。設定画面からNumes APIキーを入力してください。");
+    }
+
+    const response = await fetch("https://api.numes.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: model,
+        messages: messages,
+        temperature: temperature,
+        stream: stream,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("Numes API Error:", response.status, errorText);
+      throw new Error(`Numes API error: ${errorText}`);
     }
 
     return response;
@@ -183,7 +210,7 @@ function extractTextContent(content: any): string {
   return '';
 }
 
-// This function encapsulates the logic for calling AI APIs (OpenRouter / Gemini / Groq / Cloudflare).
+// This function encapsulates the logic for calling AI APIs (OpenRouter / Gemini / Groq / Numes / Cloudflare).
 export async function getAiResponse(payload: ChutesApiRequestBody): Promise<string> {
   const response = await getAiResponseRaw(payload, false);
   const data = await response.json();

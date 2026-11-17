@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Character } from '../lib/types';
+import { Character, AIProvider } from '../lib/types';
 import { Button } from './ui/button';
 import { Textarea } from './ui/textarea';
 import { FaMagic, FaCheck, FaUndo, FaTimes, FaEdit, FaChevronDown, FaChevronUp, FaRobot } from 'react-icons/fa';
@@ -13,7 +13,7 @@ interface AIEditModalProps {
   onApplyProposal: (proposedCharacter: Character) => void;
   isDarkMode: boolean;
   model: string;
-  provider?: string;
+  provider?: AIProvider;
   apiKey?: string;
   cloudflareAccountId?: string;
   personaPrompts?: Record<CreatorPersona, string>;

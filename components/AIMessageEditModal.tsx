@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Message, Character, ChutesApiRequestBody } from '../lib/types';
+import { Message, Character, ChutesApiRequestBody, AIProvider } from '../lib/types';
 import { Button } from './ui/button';
 import { Textarea } from './ui/textarea';
 import { FaMagic, FaCheck, FaUndo, FaTimes } from 'react-icons/fa';
@@ -12,7 +12,7 @@ interface AIMessageEditModalProps {
   onApplyEdit: (messageId: string, newText: string) => void;
   isDarkMode: boolean;
   model: string;
-  provider?: string;
+  provider?: AIProvider;
   apiKey?: string;
   cloudflareAccountId?: string;
 }

@@ -1,16 +1,19 @@
 import React from 'react';
 import { FaTimes } from 'react-icons/fa';
+import { AIProvider } from '../lib/types';
 
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
   isDarkMode: boolean;
-  provider?: 'openrouter' | 'gemini' | 'groq' | 'cloudflare';
-  setProvider?: (provider: 'openrouter' | 'gemini' | 'groq' | 'cloudflare') => void;
+  provider?: AIProvider;
+  setProvider?: (provider: AIProvider) => void;
   geminiApiKey?: string;
   setGeminiApiKey?: (key: string) => void;
   groqApiKey?: string;
   setGroqApiKey?: (key: string) => void;
+  numesApiKey?: string;
+  setNumesApiKey?: (key: string) => void;
   cloudflareApiKey?: string;
   setCloudflareApiKey?: (key: string) => void;
   cloudflareAccountId?: string;
@@ -70,6 +73,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   setGeminiApiKey,
   groqApiKey = '',
   setGroqApiKey,
+  numesApiKey = '',
+  setNumesApiKey,
   cloudflareApiKey = '',
   setCloudflareApiKey,
   cloudflareAccountId = '',
@@ -154,6 +159,19 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 <button
                   type="button"
                   onClick={() => {
+                    if (setProvider) setProvider('numes');
+                  }}
+                  className={`py-2 px-3 text-sm font-medium rounded-lg border transition-colors ${
+                    provider === 'numes'
+                      ? 'bg-indigo-600 text-white border-indigo-600'
+                      : `${inputBgColor} ${textColor} ${borderColor}`
+                  }`}
+                >
+                  Numes
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
                     if (setProvider) setProvider('cloudflare');
                   }}
                   className={`py-2 px-3 text-sm font-medium rounded-lg border transition-colors ${
@@ -193,6 +211,21 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 />
                 <div className={`text-xs mt-1.5 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
                   Groq Console (console.groq.com) で取得したAPIキーを入力してください。ブラウザに保存されます。
+                </div>
+              </div>
+            )}
+            {provider === 'numes' && (
+              <div>
+                <label className="block text-sm font-medium mb-1.5">Numes APIキー</label>
+                <input
+                  type="password"
+                  className={`w-full px-3 py-2.5 border rounded-lg text-sm shadow-sm ${inputBgColor} ${textColor} ${borderColor} focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors`}
+                  value={numesApiKey}
+                  onChange={(e) => setNumesApiKey && setNumesApiKey(e.target.value)}
+                  placeholder="sk-..."
+                />
+                <div className={`text-xs mt-1.5 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                  Numesダッシュボード (numes.ai/dashboard/keys) で取得したAPIキーを入力してください。ブラウザに保存されます。
                 </div>
               </div>
             )}
@@ -238,6 +271,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                     ? "例: gemini-2.5-flash"
                     : provider === 'groq'
                     ? "例: llama-3.3-70b-versatile"
+                    : provider === 'numes'
+                    ? "例: openai/gpt-6-luna"
                     : provider === 'cloudflare'
                     ? "例: @cf/meta/llama-3.1-8b-instruct"
                     : "例: xiaomi/mimo-v2-flash:free"
@@ -248,6 +283,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                   ? 'Geminiのモデル名を入力してください (例: gemini-2.5-flash, gemini-1.5-flash)'
                   : provider === 'groq'
                   ? 'Groqのモデル名を入力してください (例: llama-3.3-70b-versatile, llama-3.1-8b-instant)'
+                  : provider === 'numes'
+                  ? 'NumesのモデルIDを入力してください (例: openai/gpt-6-luna)'
                   : provider === 'cloudflare'
                   ? 'Cloudflare Workers AIのモデル名を入力してください (例: @cf/meta/llama-3.1-8b-instruct)'
                   : 'OpenRouterなどのモデルIDを直接入力してください。'}

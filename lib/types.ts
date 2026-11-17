@@ -47,13 +47,15 @@ export interface Conversation {
   groupParticipantIds?: string[];
 }
 
+export type AIProvider = 'openrouter' | 'gemini' | 'groq' | 'numes' | 'cloudflare';
+
 export interface ChutesApiRequestBody {
   model: string;
   messages: Array<{ role: string; content: string }>;
   temperature: number;
   useCensorship: boolean;
   imageDataUrl?: string;
-  provider?: 'openrouter' | 'gemini' | 'groq' | 'cloudflare';
+  provider?: AIProvider;
   apiKey?: string;
   cloudflareAccountId?: string;
   stream?: boolean;

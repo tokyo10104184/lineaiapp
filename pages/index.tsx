@@ -21,7 +21,7 @@ import MessageItem from '../components/MessageItem';
 import PublicCharacterList from '../components/PublicCharacterList';
 import RemixTreeModal from '../components/RemixTreeModal';
 import { FORMATTING_INSTRUCTIONS_PROMPT, CREATOR_PERSONA_PROMPTS } from '../lib/prompts';
-import { Message, Character, Conversation, ChutesApiRequestBody, EmotionGauges } from '../lib/types';
+import { Message, Character, Conversation, ChutesApiRequestBody, EmotionGauges, AIProvider } from '../lib/types';
 import { renderFormattedText, getOrCreateAnonymousUserId } from '../lib/utils';
 
 // --- Constants ---
@@ -75,26 +75,30 @@ export default function Home() {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [currentConversationId, setCurrentConversationId] = useState<string>('')
   const [input, setInput] = useState('')
-  const [provider, setProvider] = useState<'openrouter' | 'gemini' | 'groq' | 'cloudflare'>('openrouter')
+  const [provider, setProvider] = useState<AIProvider>('openrouter')
   const [geminiApiKey, setGeminiApiKey] = useState('')
   const [groqApiKey, setGroqApiKey] = useState('')
+  const [numesApiKey, setNumesApiKey] = useState('')
   const [cloudflareApiKey, setCloudflareApiKey] = useState('')
   const [cloudflareAccountId, setCloudflareAccountId] = useState('')
   const [openRouterModel, setOpenRouterModel] = useState('xiaomi/mimo-v2-flash:free')
   const [geminiModel, setGeminiModel] = useState('gemini-2.5-flash')
   const [groqModel, setGroqModel] = useState('llama-3.3-70b-versatile')
+  const [numesModel, setNumesModel] = useState('openai/gpt-6-luna')
   const [cloudflareModel, setCloudflareModel] = useState('@cf/meta/llama-3.1-8b-instruct')
 
   const model = useMemo(() => {
     if (provider === 'gemini') return geminiModel;
     if (provider === 'groq') return groqModel;
+    if (provider === 'numes') return numesModel;
     if (provider === 'cloudflare') return cloudflareModel;
     return openRouterModel;
-  }, [provider, geminiModel, groqModel, cloudflareModel, openRouterModel]);
+  }, [provider, geminiModel, groqModel, numesModel, cloudflareModel, openRouterModel]);
 
   const setModel = useCallback((newModel: string) => {
     if (provider === 'gemini') setGeminiModel(newModel);
     else if (provider === 'groq') setGroqModel(newModel);
+    else if (provider === 'numes') setNumesModel(newModel);
     else if (provider === 'cloudflare') setCloudflareModel(newModel);
     else setOpenRouterModel(newModel);
   }, [provider]);
@@ -102,9 +106,10 @@ export default function Home() {
   const activeApiKey = useMemo(() => {
     if (provider === 'gemini') return geminiApiKey;
     if (provider === 'groq') return groqApiKey;
+    if (provider === 'numes') return numesApiKey;
     if (provider === 'cloudflare') return cloudflareApiKey;
     return undefined;
-  }, [provider, geminiApiKey, groqApiKey, cloudflareApiKey]);
+  }, [provider, geminiApiKey, groqApiKey, numesApiKey, cloudflareApiKey]);
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [temperature, setTemperature] = useState(0.7)
   const [characters, setCharacters] = useState<Character[]>([])
@@ -238,12 +243,14 @@ export default function Home() {
         if (data.provider) setProvider(data.provider);
         if (data.geminiApiKey) setGeminiApiKey(data.geminiApiKey);
         if (data.groqApiKey) setGroqApiKey(data.groqApiKey);
+        if (data.numesApiKey) setNumesApiKey(data.numesApiKey);
         if (data.cloudflareApiKey) setCloudflareApiKey(data.cloudflareApiKey);
         if (data.cloudflareAccountId) setCloudflareAccountId(data.cloudflareAccountId);
         if (data.customPersonaPrompts) setCustomPersonaPrompts(data.customPersonaPrompts);
         if (data.openRouterModel) setOpenRouterModel(data.openRouterModel);
         if (data.geminiModel) setGeminiModel(data.geminiModel);
         if (data.groqModel) setGroqModel(data.groqModel);
+        if (data.numesModel) setNumesModel(data.numesModel);
         if (data.cloudflareModel) setCloudflareModel(data.cloudflareModel);
         if (data.model && !data.openRouterModel && !data.geminiModel) {
           if (data.provider === 'gemini' || data.model.startsWith('gemini')) {
@@ -323,11 +330,13 @@ export default function Home() {
           provider,
           geminiApiKey,
           groqApiKey,
+          numesApiKey,
           cloudflareApiKey,
           cloudflareAccountId,
           openRouterModel,
           geminiModel,
           groqModel,
+          numesModel,
           cloudflareModel,
           model,
           temperature,
@@ -335,7 +344,7 @@ export default function Home() {
         };
         localStorage.setItem('chatAppData', JSON.stringify(data));
     }
-  }, [conversations, characters, currentConversationId, currentCharacterId, isDarkMode, useCensorship, streamResponse, lineThemeActive, isAutoReplying, chatFontSize, allowAICustomTextColor, provider, geminiApiKey, groqApiKey, cloudflareApiKey, cloudflareAccountId, openRouterModel, geminiModel, groqModel, cloudflareModel, model, temperature, customPersonaPrompts]);
+  }, [conversations, characters, currentConversationId, currentCharacterId, isDarkMode, useCensorship, streamResponse, lineThemeActive, isAutoReplying, chatFontSize, allowAICustomTextColor, provider, geminiApiKey, groqApiKey, numesApiKey, cloudflareApiKey, cloudflareAccountId, openRouterModel, geminiModel, groqModel, numesModel, cloudflareModel, model, temperature, customPersonaPrompts]);
 
   useEffect(() => {
     const sidebarElement = sidebarRef.current;
@@ -1722,6 +1731,8 @@ export default function Home() {
         setGeminiApiKey={setGeminiApiKey}
         groqApiKey={groqApiKey}
         setGroqApiKey={setGroqApiKey}
+        numesApiKey={numesApiKey}
+        setNumesApiKey={setNumesApiKey}
         cloudflareApiKey={cloudflareApiKey}
         setCloudflareApiKey={setCloudflareApiKey}
         cloudflareAccountId={cloudflareAccountId}

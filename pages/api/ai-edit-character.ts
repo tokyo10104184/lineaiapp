@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getAiResponse } from '../../lib/ai';
-import { Character, ChutesApiRequestBody } from '../../lib/types';
+import { Character, ChutesApiRequestBody, AIProvider } from '../../lib/types';
 
 const EDIT_CHARACTER_SYSTEM_PROMPT = `You are an expert character setting editor for AI chat applications.
 Your task is to modify and refine an existing character's settings (name, description, systemPrompt) based on user instructions.
@@ -105,7 +105,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     character?: Character;
     instruction?: string;
     model?: string;
-    provider?: 'openrouter' | 'gemini' | 'groq' | 'cloudflare';
+    provider?: AIProvider;
     apiKey?: string;
     cloudflareAccountId?: string;
     expertPersonaPrompt?: string;
