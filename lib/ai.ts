@@ -74,7 +74,7 @@ export async function getAiResponseRaw(payload: ChutesApiRequestBody, stream: bo
       throw new Error("Groq APIキーが設定されていません。設定画面からGroq APIキーを入力してください。");
     }
 
-    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    const response = await fetch("https://api.numes.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${apiKey}`,
